@@ -39,6 +39,7 @@ class HomeController extends Gdn_Controller {
     * is encountered.
     */
    public function FileNotFound() {
+	  header('Content-Type: text/html; charset=utf-8', true, 404);
       $this->Render();
    }
    

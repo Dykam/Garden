@@ -26,7 +26,7 @@ function ErrorHandler($ErrorNumber, $Message, $File, $Line, $Arguments) {
    
    // Clean the output buffer in case an error was encountered in-page.
    @ob_end_clean();
-   header('Content-Type: text/html; charset=utf-8');
+   header('Content-Type: text/html; charset=utf-8', true, 500);
    
    $SenderMessage = $Message;
    $SenderObject = 'PHP';
