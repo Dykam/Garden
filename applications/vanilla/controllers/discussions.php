@@ -25,7 +25,6 @@ class DiscussionsController extends VanillaController {
          $this->Head->AddRss('/rss/'.$this->SelfUrl, $this->Head->Title());
          $this->Head->Title(T('All Discussions'));
       }
-      $Offset--;
       if (!is_numeric($Offset) || $Offset < 0)
          $Offset = 0;
       
