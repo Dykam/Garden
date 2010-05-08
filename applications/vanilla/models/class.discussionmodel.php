@@ -1,13 +1,21 @@
 <?php if (!defined('APPLICATION')) exit();
+/*
+Copyright 2008, 2009 Vanilla Forums Inc.
+This file is part of Garden.
+Garden is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+Garden is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+You should have received a copy of the GNU General Public License along with Garden.  If not, see <http://www.gnu.org/licenses/>.
+Contact Vanilla Forums Inc. at support [at] vanillaforums [dot] com
+*/
 
-class Gdn_DiscussionModel extends Gdn_VanillaModel {
+class DiscussionModel extends VanillaModel {
    /**
     * Class constructor.
     */
    public function __construct() {
       parent::__construct('Discussion');
    }
-   
+   /*
    public function DiscussionQuery() {
       $Perms = $this->CategoryPermissions();
       if($Perms !== TRUE) {
@@ -15,13 +23,13 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
       }
       
       $this->SQL
-         ->Select('d.InsertUserID', '', 'FirstUserID')
-         ->Select('d.DateInserted', '', 'FirstDate')
-         ->Select('iu.Name', '', 'FirstName')
-         ->Select('iup.Name', '', 'FirstPhoto')
-         // ->Select('fc.Body', '', 'FirstBody')
-         ->Select('lc.DateInserted', '', 'LastDate')
-         ->Select('lc.InsertUserID', '', 'LastUserID')
+         ->Select('d.InsertUserID')
+         ->Select('d.DateInserted', '', 'InsertDate')
+         ->Select('iu.Name', '', 'InsertName')
+         ->Select('iup.Name', '', 'InsertPhoto')
+         ->Select('d.Body')
+         ->Select('d.DateLastComment', '', 'LastDate')
+         ->Select('d.LastCommentUserID', '', 'LastUserID')
          ->Select('lcu.Name', '', 'LastName')
          ->Select('lcup.Name', '', 'LastPhoto')
          ->Select('lc.Body', '', 'LastBody')
@@ -29,16 +37,15 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
          ->From('Discussion d')
          ->Join('User iu', 'd.InsertUserID = iu.UserID', 'left') // First comment author is also the discussion insertuserid
          ->Join('Photo iup', 'iu.PhotoID = iup.PhotoID', 'left') // First Photo
-         ->Join('Comment fc', 'd.FirstCommentID = fc.CommentID') // First comment
-         ->Join('Comment lc', 'd.LastCommentID = lc.CommentID') // Last comment
-         ->Join('User lcu', 'lc.InsertUserID = lcu.UserID', 'left') // Last comment user
+         ->Join('User lcu', 'd.LastCommentUserID = lcu.UserID', 'left') // Last comment user
          ->Join('Photo lcup', 'lcu.PhotoID = lcup.PhotoID', 'left') // Last Photo
          ->Join('Category ca', 'd.CategoryID = ca.CategoryID', 'left') // Category
          ->Join('Category pc', 'ca.ParentCategoryID = pc.CategoryID', 'left'); // Parent category
          //->Permission('ca', 'CategoryID', 'Vanilla.Discussions.View');
    }
+   */
    
-   public function DiscussionSummaryQuery() {
+   public function DiscussionSummaryQuery($AdditionalFields = array()) {
       $Perms = $this->CategoryPermissions();
       if($Perms !== TRUE) {
          $this->SQL->WhereIn('d.CategoryID', $Perms);
@@ -49,10 +56,10 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
          ->Select('d.DateInserted', '', 'FirstDate')
          ->Select('iu.Name', '', 'FirstName') // <-- Need these for rss!
          ->Select('iup.Name', '', 'FirstPhoto')
-         ->Select('fc.Body', '', 'FirstComment') // <-- Need these for rss!
-         ->Select('fc.Format', '', 'FirstCommentFormat') // <-- Need these for rss!
-         ->Select('lc.DateInserted', '', 'LastDate')
-         ->Select('lc.InsertUserID', '', 'LastUserID')
+         ->Select('d.Body') // <-- Need these for rss!
+         ->Select('d.Format') // <-- Need these for rss!
+         ->Select('d.DateLastComment', '', 'LastDate')
+         ->Select('d.LastCommentUserID', '', 'LastUserID')
          ->Select('lcu.Name', '', 'LastName')
          //->Select('lcup.Name', '', 'LastPhoto')
          //->Select('lc.Body', '', 'LastBody')
@@ -61,18 +68,33 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
          ->From('Discussion d')
          ->Join('User iu', 'd.InsertUserID = iu.UserID', 'left') // First comment author is also the discussion insertuserid
          ->Join('Photo iup', 'iu.PhotoID = iup.PhotoID', 'left') // First Photo
-         ->Join('Comment fc', 'd.FirstCommentID = fc.CommentID', 'left') // First comment
-         ->Join('Comment lc', 'd.LastCommentID = lc.CommentID', 'left') // Last comment
-         ->Join('User lcu', 'lc.InsertUserID = lcu.UserID', 'left') // Last comment user
+         //->Join('Comment lc', 'd.LastCommentID = lc.CommentID', 'left') // Last comment
+         ->Join('User lcu', 'd.LastCommentUserID = lcu.UserID', 'left') // Last comment user
          //->Join('Photo lcup', 'lcu.PhotoID = lcup.PhotoID', 'left') // Last Photo
          ->Join('Category ca', 'd.CategoryID = ca.CategoryID', 'left') // Category
          ->Join('Category pc', 'ca.ParentCategoryID = pc.CategoryID', 'left'); // Parent category
          //->Permission('ca', 'CategoryID', 'Vanilla.Discussions.View');
+			
+		if(is_array($AdditionalFields)) {
+			foreach($AdditionalFields as $Alias => $Field) {
+				// See if a new table needs to be joined to the query.
+				$TableAlias = explode('.', $Field);
+				$TableAlias = $TableAlias[0];
+				if(array_key_exists($TableAlias, $Tables)) {
+					$Join = $Tables[$TableAlias];
+					$this->SQL->Join($Join[0], $Join[1]);
+					unset($Tables[$TableAlias]);
+				}
+				
+				// Select the field.
+				$this->SQL->Select($Field, '', is_numeric($Alias) ? '' : $Alias);
+			}
+		}
          
       $this->FireEvent('AfterDiscussionSummaryQuery');
    }
    
-   public function Get($Offset = '0', $Limit = '', $Wheres = '') {
+   public function Get($Offset = '0', $Limit = '', $Wheres = '', $AdditionalFields = NULL) {
       if ($Limit == '') 
          $Limit = Gdn::Config('Vanilla.Discussions.PerPage', 50);
 
@@ -96,30 +118,65 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
                ->Select('now()', '', 'DateLastViewed')
                ->Select('0', '', 'Dismissed')
                ->Select('0', '', 'Bookmarked')
-               ->Select('0', '', 'CountCommentWatch');
+               ->Select('0', '', 'CountCommentWatch')
+					->Select('d.Announce','','IsAnnounce');
       }
+		
+		$this->AddArchiveWhere($this->SQL);
       
       if (is_array($Wheres))
          $this->SQL->Where($Wheres);
+			
+		// If not looking at discussions filtered by bookmarks or user, filter announcements out.
+		if (!isset($Wheres['w.Bookmarked']) && !isset($Wheres['d.InsertUserID']))
+			$this->SQL->Where('d.Announce<>', '1');
+			
+		$this->FireEvent('BeforeGet');
       
-      if (!isset($Wheres['w.Bookmarked']) && !isset($Wheres['d.InsertUserID'])) {
-         $this->SQL
-            ->BeginWhereGroup()
-            ->Where('d.Announce', '0');
-         
-         // Removing this for speed.
-         //if ($UserID > 0)
-            //$this->SQL->OrWhere('w.Dismissed', '1');
-            
-         $this->SQL->EndWhereGroup();
-      }
-         
-      return $this->SQL
+      $Data = $this->SQL
          ->OrderBy('d.DateLastComment', 'desc')
          ->Limit($Limit, $Offset)
          ->Get();
+			
+		$this->AddDiscussionColumns($Data);
+		
+		return $Data;
    }
-   
+	
+	public function AddDiscussionColumns($Data) {
+		// Change discussions based on archiving.
+		$ArchiveTimestamp = Gdn_Format::ToTimestamp(Gdn::Config('Vanilla.Archive.Date', 0));
+		$Result = &$Data->Result();
+		foreach($Result as &$Discussion) {
+			if(Gdn_Format::ToTimestamp($Discussion->DateLastComment) <= $ArchiveTimestamp) {
+				$Discussion->Closed = '1';
+				if($Discussion->CountCommentWatch) {
+					$Discussion->CountUnreadComments = $Discussion->CountComments - $Discussion->CountCommentWatch;
+				} else {
+					$Discussion->CountUnreadComments = 0;
+				}
+			} else {
+				$Discussion->CountUnreadComments = $Discussion->CountComments - $Discussion->CountCommentWatch;
+			}
+		}
+	}
+	
+	/**
+	 * @param Gdn_SQLDriver $Sql
+	 */
+	public function AddArchiveWhere($Sql = NULL) {
+		if(is_null($Sql))
+			$Sql = $this->SQL;
+		
+		$Exclude = Gdn::Config('Vanilla.Archive.Exclude');
+		if($Exclude) {
+			$ArchiveDate = Gdn::Config('Vanilla.Archive.Date');
+			if($ArchiveDate) {
+				$Sql->Where('d.DateLastComment >', $ArchiveDate);
+			}
+		}
+	}
+
    public function GetAnnouncements($Wheres = '') {
       $Session = Gdn::Session();
       $Limit = Gdn::Config('Vanilla.Discussions.PerPage', 50);
@@ -136,12 +193,17 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
       if (is_array($Wheres))
          $this->SQL->Where($Wheres);
          
-      return $this->SQL
+      $Data = $this->SQL
          ->Where('d.Announce', '1')
+			->BeginWhereGroup()
          ->Where('w.Dismissed is null')
-         ->OrderBy('lc.DateInserted', 'desc')
+         ->OrWhere('w.Dismissed', '0')
+         ->OrderBy('d.DateLastComment', 'desc')
          ->Limit($Limit, $Offset)
          ->Get();
+			
+		$this->AddDiscussionColumns($Data);
+		return $Data;
    }
    
    // Returns all users who have bookmarked the specified discussion
@@ -214,24 +276,35 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
    public function GetID($DiscussionID) {
       $Session = Gdn::Session();
       $this->FireEvent('BeforeGetID');
-      return $this->SQL
+      $Data = $this->SQL
          ->Select('d.*')
-         ->Select('c.Body')
          ->Select('ca.Name', '', 'Category')
+         ->Select('ca.UrlCode', '', 'CategoryUrlCode')
          ->Select('w.DateLastViewed, w.Dismissed, w.Bookmarked')
          ->Select('w.CountComments', '', 'CountCommentWatch')
-         ->Select('lc.DateInserted', '', 'LastDate')
-         ->Select('lc.InsertUserID', '', 'LastUserID')
+         ->Select('d.DateLastComment', '', 'LastDate')
+         ->Select('d.LastCommentUserID', '', 'LastUserID')
          ->Select('lcu.Name', '', 'LastName')
+			->Select('iu.Name', '', 'InsertName')
+			->Select('iup.Name', '', 'InsertPhoto')
          ->From('Discussion d')
-         ->Join('Comment c', 'd.FirstCommentID = c.CommentID', 'left')
          ->Join('Category ca', 'd.CategoryID = ca.CategoryID', 'left')
          ->Join('UserDiscussion w', 'd.DiscussionID = w.DiscussionID and w.UserID = '.$Session->UserID, 'left')
-         ->Join('Comment lc', 'd.LastCommentID = lc.CommentID', 'left') // Last comment
+			->Join('User iu', 'd.InsertUserID = iu.UserID', 'left') // Insert user
+			->Join('Photo iup', 'iu.PhotoID = iup.PhotoID', 'left') // First Photo
+			->Join('Comment lc', 'd.LastCommentID = lc.CommentID', 'left') // Last comment
          ->Join('User lcu', 'lc.InsertUserID = lcu.UserID', 'left') // Last comment user
          ->Where('d.DiscussionID', $DiscussionID)
          ->Get()
          ->FirstRow();
+		
+		if (
+			$Data
+			&& Gdn_Format::ToTimestamp($Data->DateLastComment) <= Gdn_Format::ToTimestamp(Gdn::Config('Vanilla.Archive.Date', 0))
+		) {
+			$Data->Closed = '1';
+		}
+		return $Data;
    }
    
    /**
@@ -261,7 +334,7 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
          $this->SQL
             ->Update('UserDiscussion')
             ->Set('CountComments', $CountComments)
-            ->Set('DateLastViewed', Format::ToDateTime())
+            ->Set('DateLastViewed', Gdn_Format::ToDateTime())
             ->Set('Dismissed', '1')
             ->Where('DiscussionID', $DiscussionID)
             ->Where('UserID', $UserID)
@@ -273,27 +346,25 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
                'UserID' => $UserID,
                'DiscussionID' => $DiscussionID,
                'CountComments' => $CountComments,
-               'DateLastViewed' => Format::ToDateTime(),
+               'DateLastViewed' => Gdn_Format::ToDateTime(),
                'Dismissed' => '1'
             )
          );
       }
    }
    
-   public function Save($FormPostValues, $CommentModel) {
+   public function Save($FormPostValues) {
       $Session = Gdn::Session();
       
       // Define the primary key in this model's table.
       $this->DefineSchema();
-      $CommentModel->DefineSchema();
       
       // Add & apply any extra validation rules:      
       $this->Validation->ApplyRule('Body', 'Required');
-      $CommentModel->Validation->ApplyRule('Body', 'Required');
       $MaxCommentLength = Gdn::Config('Vanilla.Comment.MaxLength');
       if (is_numeric($MaxCommentLength) && $MaxCommentLength > 0) {
-         $CommentModel->Validation->SetSchemaProperty('Body', 'Length', $MaxCommentLength);
-         $CommentModel->Validation->ApplyRule('Body', 'Length');
+         $this->Validation->SetSchemaProperty('Body', 'Length', $MaxCommentLength);
+         $this->Validation->ApplyRule('Body', 'Length');
       }      
       
       // Get the DiscussionID from the form so we know if we are inserting or updating.
@@ -308,7 +379,7 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
             
          $this->AddInsertFields($FormPostValues);
          // $FormPostValues['LastCommentUserID'] = $Session->UserID;
-         $FormPostValues['DateLastComment'] = Format::ToDateTime();
+         $FormPostValues['DateLastComment'] = Gdn_Format::ToDateTime();
       }
       // Add the update fields because this table's default sort is by DateUpdated (see $this->Get()).
       $this->AddUpdateFields($FormPostValues);
@@ -324,10 +395,7 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
          unset($FormPostValues['Sink']);
          
       // Validate the form posted values
-      if (
-         $this->Validate($FormPostValues, $Insert)
-         && $CommentModel->Validate($FormPostValues)
-      ) {
+      if ($this->Validate($FormPostValues, $Insert)) {
          // If the post is new and it validates, make sure the user isn't spamming
          if (!$Insert || !$this->CheckForSpam('Discussion')) {
             $Fields = $this->Validation->SchemaValidationFields(); // All fields on the form that relate to the schema
@@ -336,28 +404,12 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
             $Discussion = FALSE;
             if ($DiscussionID > 0) {
                $this->SQL->Put($this->Name, $Fields, array($this->PrimaryKey => $DiscussionID));
-            
-               // Get the CommentID from the discussion table before saving
-               $FormPostValues['CommentID'] = $this->SQL
-                  ->Select('FirstCommentID')
-                  ->From('Discussion')
-                  ->Where('DiscussionID', $DiscussionID)
-                  ->Get()
-                  ->FirstRow()
-                  ->FirstCommentID;
-               $CommentModel->Save($FormPostValues);
             } else {
+					$Fields['Format'] = Gdn::Config('Garden.InputFormatter', '');
                $DiscussionID = $this->SQL->Insert($this->Name, $Fields);
                // Assign the new DiscussionID to the comment before saving
                $FormPostValues['IsNewDiscussion'] = TRUE;
                $FormPostValues['DiscussionID'] = $DiscussionID;
-               $CommentID = $CommentModel->Save($FormPostValues);
-               // Assign the FirstCommentID to the discussion table
-               $this->SQL->Put($this->Name,
-                  array('FirstCommentID' => $CommentID, 'LastCommentID' => $CommentID),
-                  array($this->PrimaryKey => $DiscussionID)
-               );
-               
                $this->EventArguments['FormPostValues'] = $FormPostValues;
                $this->EventArguments['InsertFields'] = $Fields;
                $this->EventArguments['DiscussionID'] = $DiscussionID;
@@ -368,14 +420,14 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
                $Usernames = GetMentions($DiscussionName);
                $UserModel = Gdn::UserModel();
                foreach ($Usernames as $Username) {
-                  $User = $UserModel->GetWhere(array('Name' => $Username))->FirstRow();
+                  $User = $UserModel->GetByUsername($Username);
                   if ($User && $User->UserID != $Session->UserID) {
                      AddActivity(
-                        $User->UserID,
+                        $Session->UserID,
                         'DiscussionMention',
                         '',
-                        $Session->UserID,
-                        '/discussion/'.$DiscussionID.'/'.Format::Url($DiscussionName)
+                        $User->UserID,
+                        '/discussion/'.$DiscussionID.'/'.Gdn_Format::Url($DiscussionName)
                      );
                   }
                }
@@ -394,13 +446,6 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
 
             $this->UpdateDiscussionCount($CategoryID);
          }
-      } else {
-         // Make sure that all of the validation results from both validations are present for view by the form
-         foreach ($CommentModel->ValidationResults() as $FieldName => $Results) {
-            foreach ($Results as $Result) {
-               $this->Validation->AddValidationResult($FieldName, $Result);
-            }
-         }
       }
       return $DiscussionID;
    }
@@ -410,7 +455,7 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
       AddActivity(
          $UserID,
          'NewDiscussion',
-         Anchor(Format::Text($DiscussionName), 'vanilla/discussion/'.$DiscussionID.'/'.Format::Url($DiscussionName))
+         Anchor(Gdn_Format::Text($DiscussionName), 'vanilla/discussion/'.$DiscussionID.'/'.Gdn_Format::Url($DiscussionName))
       );
       
       // Get the user's discussion count
@@ -435,13 +480,41 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
     * @param int The DiscussionID relating to the category we are updating.
     */
    public function UpdateDiscussionCount($CategoryID) {
-      if (is_numeric($CategoryID) && $CategoryID > 0) {
-         $Data = $this->SQL
-            ->Select('DiscussionID', 'count', 'CountDiscussions')
-            ->From('Discussion')
-            ->Where('CategoryID', $CategoryID)
-            ->Get()
-            ->FirstRow();
+		if(strcasecmp($CategoryID, 'All') == 0) {
+			$Exclude = (bool)Gdn::Config('Vanilla.Archive.Exclude');
+			$ArchiveDate = Gdn::Config('Vanilla.Archive.Date');
+			$Params = array();
+			$Where = '';
+			
+			if($Exclude && $ArchiveDate) {
+				$Where = 'where d.DateLastComment > :ArchiveDate';
+				$Params[':ArchiveDate'] = $ArchiveDate;
+			}
+			
+			// Update all categories.
+			$Sql = "update :_Category c
+left join (
+  select
+    d.CategoryID,
+    count(d.DiscussionID) as CountDiscussions
+  from :_Discussion d
+  $Where
+  group by d.CategoryID
+) d
+  on c.CategoryID = d.CategoryID
+set c.CountDiscussions = coalesce(d.CountDiscussions, 0)";
+			$Sql = str_replace(':_', $this->Database->DatabasePrefix, $Sql);
+			$this->Database->Query($Sql, $Params, 'DiscussionModel_UpdateDiscussionCount');
+			
+		} elseif (is_numeric($CategoryID) && $CategoryID > 0) {
+         $this->SQL
+            ->Select('d.DiscussionID', 'count', 'CountDiscussions')
+            ->From('Discussion d')
+            ->Where('d.CategoryID', $CategoryID);
+         
+			$this->AddArchiveWhere();
+			
+			$Data = $this->SQL->Get()->FirstRow();
          $Count = $Data ? $Data->CountDiscussions : 0;
          
          if ($Count >= 0) {
@@ -453,6 +526,20 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
          }
       }
    }
+	
+	/**
+	 * Set the bookmark count for the specified user. Returns the bookmark count.
+	 */
+	public function SetBookmarkCount($UserID) {
+		$Count = $this->BookmarkCount($UserID);
+      $this->SQL
+         ->Update('User')
+         ->Set('CountBookmarks', $Count)
+         ->Where('UserID', $UserID)
+         ->Put();
+		
+		return $Count;
+	}
    
    /**
     * Announces (or unannounces) a discussion. Returns the value that was set.
@@ -486,7 +573,7 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
                'UserID' => $UserID,
                'DiscussionID' => $DiscussionID,
                'CountComments' => 0,
-               'DateLastViewed' => Format::ToDateTime(),
+               'DateLastViewed' => Gdn_Format::ToDateTime(),
                'Bookmarked' => '1'
             ));
       } else {
@@ -523,7 +610,13 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
       return 0;
    }
    
+	/**
+	 * Delete a discussion. Update and/or delete all related data.
+	 */
    public function Delete($DiscussionID) {
+		// Retrieve the users who have bookmarked this discussion.
+		$BookmarkData = $this->GetBookmarkUsers($DiscussionID);
+
       $Data = $this->SQL
          ->Select('CategoryID,InsertUserID')
          ->From('Discussion')
@@ -540,6 +633,7 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
       $this->SQL->Delete('Draft', array('DiscussionID' => $DiscussionID));
       $this->SQL->Delete('Comment', array('DiscussionID' => $DiscussionID));
       $this->SQL->Delete('Discussion', array('DiscussionID' => $DiscussionID));
+		$this->SQL->Delete('UserDiscussion', array('DiscussionID' => $DiscussionID));
       $this->UpdateDiscussionCount($CategoryID);
       
       // Get the user's discussion count
@@ -554,8 +648,13 @@ class Gdn_DiscussionModel extends Gdn_VanillaModel {
          ->Update('User')
          ->Set('CountDiscussions', $Data->NumRows() > 0 ? $Data->FirstRow()->CountDiscussions : 0)
          ->Where('UserID', $UserID)
-         ->Put();      
-      
+         ->Put();
+
+		// Update bookmark counts for users who had bookmarked this discussion
+		foreach ($BookmarkData->Result() as $User) {
+			$this->SetBookmarkCount($User->UserID);
+		}
+			
       return TRUE;
    }
 }

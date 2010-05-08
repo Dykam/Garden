@@ -19,7 +19,7 @@ Contact Vanilla Forums Inc. at support [at] vanillaforums [dot] com
  * @version @@GARDEN-VERSION@@
  * @namespace Garden.Core
  */
-class Format {
+class Gdn_Format {
 
    /**
     * The ActivityType table has some special sprintf search/replace values in the
@@ -122,12 +122,12 @@ class Format {
          return $Mixed;
       
       if (is_string($Mixed)) {
-         if (method_exists('Format', $FormatMethod)) {
+         if (method_exists('Gdn_Format', $FormatMethod)) {
             $Mixed = self::$FormatMethod($Mixed);
          } else if (function_exists($FormatMethod)) {
             $Mixed = $FormatMethod($Mixed);
          } else {
-            $Mixed = Format::Text($Mixed);
+            $Mixed = Gdn_Format::Text($Mixed);
          }
       } else if (is_array($Mixed)) {
          foreach($Mixed as $Key => $Val) {
@@ -207,6 +207,20 @@ class Format {
             $Mixed
          );
          
+         // Mentions & Hashes
+         $Mixed = Gdn_Format::Mentions($Mixed);
+         
+         // nl2br
+         $Mixed = preg_replace("/(\015\012)|(\015)|(\012)/", "<br />", $Mixed);
+
+         return $Formatter->Format($Mixed);
+      }
+   }
+   
+   public static function Mentions($Mixed) {
+      if (!is_string($Mixed)) {
+         return self::To($Mixed, 'Mentions');
+      } else {         
          // Handle @mentions
          // This one grabs mentions that start at the beginning of $Mixed
          $Mixed = preg_replace(
@@ -234,11 +248,7 @@ class Format {
             '\\1'.Anchor('\\2', '/search?Search=%23\\3'),
             $Mixed
          );
-         
-         // nl2br
-         $Mixed = preg_replace("/(\015\012)|(\015)|(\012)/", "<br />", $Mixed);
-
-         return $Formatter->Format($Mixed);
+         return $Mixed;
       }
    }
 
@@ -250,50 +260,76 @@ class Format {
     */
    public static function BBCode($Mixed) {
       if (!is_string($Mixed)) {
-         return self::To($Mixed, 'Html');
+         return self::To($Mixed, 'BBCode');
       } else {         
-		$Mixed = preg_replace("#\[b\](.*?)\[/b\]#si",'<b>\\1</b>',$Mixed);
-		$Mixed = preg_replace("#\[i\](.*?)\[/i\]#si",'<i>\\1</i>',$Mixed);
-		$Mixed = preg_replace("#\[u\](.*?)\[/u\]#si",'<u>\\1</u>',$Mixed);
-		$Mixed = preg_replace("#\[s\](.*?)\[/s\]#si",'<s>\\1</s>',$Mixed);
-		$Mixed = preg_replace("#\[quote=('(.*?)',(.*?))\](.*?)\[/quote\]#si",'<p><cite>\\2</cite> napisał:</p><blockquote>\\4</blockquote>',$Mixed);
-		$Mixed = preg_replace("#\[quote\](.*?)\[/quote\]#si",'<blockquote>\\1</blockquote>',$Mixed);
-		$Mixed = preg_replace("#\[code\](.*?)\[/code\]#si",'<code>\\1</code>',$Mixed);
-		$Mixed = preg_replace("#\[hide\](.*?)\[/hide\]#si",'\\1',$Mixed);
-		$Mixed = preg_replace("#\[url\](.*?)\[/url\]#si",'\\1',$Mixed);
-		$Mixed = preg_replace("#\[url=(.*?)\](.*?)\[/url\]#si",'<a href="\\1">\\2</a>',$Mixed);
-		$Mixed = preg_replace("#\[php\](.*?)\[/php\]#si",'<code>\\1</code>',$Mixed);
-		$Mixed = preg_replace("#\[mysql\](.*?)\[/mysql\]#si",'<code>\\1</code>',$Mixed);
-		$Mixed = preg_replace("#\[css\](.*?)\[/css\]#si",'<code>\\1</code>',$Mixed);
-		$Mixed = preg_replace("#\[img=(.*?)\](.*?)\[/img\]#si",'<img src="\\1" alt="\\2" />',$Mixed);
-		$Mixed = preg_replace("#\[img\](.*?)\[/img\]#si",'<img src="\\1" border="0" />',$Mixed);
-		$Mixed = preg_replace("#\[color=(.*?)\](.*?)\[/color\]#si",'<font color="\\1">\\2</font>',$Mixed);
-		$Mixed = preg_replace("#\[size=(.*?)\](.*?)\[/size\]#si",'<font size="\\1">\\2</font>',$Mixed);
-		
-         // Handle @mentions
-         // This one grabs mentions that start at the beginning of $Mixed
-         $Mixed = preg_replace(
-            '/^(@([\d\w_]{1,20}))/si',
-            Anchor('\\1', '/profile/\\2'),
-            $Mixed
-         );
-         
-         // This one handles all other mentions
-         $Mixed = preg_replace(
-            '/([\s]+)(@([\d\w_]{3,20}))/si',
-            '\\1'.Anchor('\\2', '/profile/\\3'),
-            $Mixed
-         );
-		 
-		 $Formatter = Gdn::Factory('HtmlFormatter');
-         if(is_null($Formatter)) {
-            return $Mixed;
+         $Formatter = Gdn::Factory('HtmlFormatter');
+         if (is_null($Formatter)) {
+            return Gdn_Format::Display($Mixed);
          } else {
+            $Mixed = preg_replace("#\[b\](.*?)\[/b\]#si",'<b>\\1</b>',$Mixed);
+            $Mixed = preg_replace("#\[i\](.*?)\[/i\]#si",'<i>\\1</i>',$Mixed);
+            $Mixed = preg_replace("#\[u\](.*?)\[/u\]#si",'<u>\\1</u>',$Mixed);
+            $Mixed = preg_replace("#\[s\](.*?)\[/s\]#si",'<s>\\1</s>',$Mixed);
+            $Mixed = preg_replace("#\[quote=('(.*?)',(.*?))\](.*?)\[/quote\]#si",'<p><cite>\\2</cite> napisał:</p><blockquote>\\4</blockquote>',$Mixed);
+            $Mixed = preg_replace("#\[quote\](.*?)\[/quote\]#si",'<blockquote>\\1</blockquote>',$Mixed);
+            $Mixed = preg_replace("#\[code\](.*?)\[/code\]#si",'<code>\\1</code>',$Mixed);
+            $Mixed = preg_replace("#\[hide\](.*?)\[/hide\]#si",'\\1',$Mixed);
+            $Mixed = preg_replace("#\[url\](.*?)\[/url\]#si",'\\1',$Mixed);
+            $Mixed = preg_replace("#\[url=(.*?)\](.*?)\[/url\]#si",'<a href="\\1">\\2</a>',$Mixed);
+            $Mixed = preg_replace("#\[php\](.*?)\[/php\]#si",'<code>\\1</code>',$Mixed);
+            $Mixed = preg_replace("#\[mysql\](.*?)\[/mysql\]#si",'<code>\\1</code>',$Mixed);
+            $Mixed = preg_replace("#\[css\](.*?)\[/css\]#si",'<code>\\1</code>',$Mixed);
+            $Mixed = preg_replace("#\[img=(.*?)\](.*?)\[/img\]#si",'<img src="\\1" alt="\\2" />',$Mixed);
+            $Mixed = preg_replace("#\[img\](.*?)\[/img\]#si",'<img src="\\1" border="0" />',$Mixed);
+            $Mixed = preg_replace("#\[color=(.*?)\](.*?)\[/color\]#si",'<font color="\\1">\\2</font>',$Mixed);
+            $Mixed = preg_replace("#\[size=(.*?)\](.*?)\[/size\]#si",'<font size="\\1">\\2</font>',$Mixed);
+            $Mixed = Gdn_Format::Mentions($Mixed);
             return $Formatter->Format($Mixed);
+         }         
+      }
+   }
+   
+   /**
+    * Format a string from of "Deleted" content (comment, message, etc).
+    *
+    * @param mixed $Mixed An object, array, or string to be formatted.
+    * @return string
+    */
+   public static function Deleted($Mixed) {
+      if (!is_string($Mixed)) {
+         return self::To($Mixed, 'Deleted');
+      } else {         
+         $Formatter = Gdn::Factory('HtmlFormatter');
+         if (is_null($Formatter)) {
+            return Gdn_Format::Display($Mixed);
+         } else {
+            return $Formatter->Format(Wrap($Mixed, 'div', ' class="Deleted"'));
          }
       }
    }
    
+   /**
+    * Format a string using Markdown syntax. Also purifies the output html.
+    *
+    * @param mixed $Mixed An object, array, or string to be formatted.
+    * @return string
+    */
+   public static function Markdown($Mixed) {
+      if (!is_string($Mixed)) {
+         return self::To($Mixed, 'Markdown');
+      } else {         
+         $Formatter = Gdn::Factory('HtmlFormatter');
+         if (is_null($Formatter)) {
+            return Gdn_Format::Display($Mixed);
+         } else {
+            require_once(PATH_LIBRARY.DS.'vendors'.DS.'markdown'.DS.'markdown.php');
+            $Mixed = Markdown($Mixed);
+            $Mixed = Gdn_Format::Mentions($Mixed);
+            return $Formatter->Format($Mixed);
+         }
+      }
+   }
+
    public static function Wiki($Mixed) {
       if (!is_string($Mixed)) {
          return self::To($Mixed, 'Html');
@@ -373,7 +409,8 @@ class Format {
          $Mixed = utf8_decode($Mixed);
          $Mixed = preg_replace('/-+/', '-', str_replace(' ', '-', trim(preg_replace('/([^\w\d_:.])/', ' ', $Mixed))));
          $Mixed = utf8_encode($Mixed);
-         return strtolower($Mixed);
+         $Mixed = urlencode(strtolower($Mixed));
+			return $Mixed;
       }
    }
 
@@ -408,37 +445,42 @@ class Format {
 
 
    /**
-    * Takes any variable and serializes it in Json format.
+    * Takes any variable and serializes it.
     *
-    * @param mixed $Mixed An object, array, or string to be formatted.
-    * @return string
+    * @param mixed $Mixed An object, array, or string to be serialized.
+    * @return string The serialized version of the string.
     */
    public static function Serialize($Mixed) {
-      if (is_object($Mixed))
-         return 'obj:' . json_encode($Mixed);
-      else if (is_array($Mixed))
-         return 'arr:' . json_encode($Mixed);
-      else
-         return $Mixed;
+		if(is_array($Mixed) || is_object($Mixed)
+			|| (is_string($Mixed) && (substr_compare('a:', $Mixed, 0, 2) === 0 || substr_compare('O:', $Mixed, 0, 2) === 0
+				|| substr_compare('arr:', $Mixed, 0, 4) === 0 || substr_compare('obj:', $Mixed, 0, 4) === 0))) {
+			$Result = serialize($Mixed);
+		} else {
+			$Result = $Mixed;
+		}
+		return $Result;
    }
 
 
    /**
-    * Takes a Json serialized variable and unserializes it back into it's
+    * Takes a serialized variable and unserializes it back into it's
     * original state.
     *
-    * @param string $SerializedString A JSON string to be unserialized.
+    * @param string $SerializedString A json or php serialized string to be unserialized.
     * @return mixed
     */
    public static function Unserialize($SerializedString) {
-      if (is_string($SerializedString)) {
-         if (strpos($SerializedString, 'obj:') === 0) {
-            return json_decode(substr($SerializedString, 4));
-         } else if (strpos($SerializedString, 'arr:') === 0) {
-            return json_decode(substr($SerializedString, 4), TRUE);
-         }
+		$Result = $SerializedString;
+		
+      if(is_string($SerializedString)) {
+			if(substr_compare('a:', $SerializedString, 0, 2) === 0 || substr_compare('O:', $SerializedString, 0, 2) === 0)
+				$Result = unserialize($SerializedString);
+			elseif(substr_compare('obj:', $SerializedString, 0, 4) === 0)
+            $Result = json_decode(substr($SerializedString, 4), FALSE);
+         elseif(substr_compare('arr:', $SerializedString, 0, 4) === 0)
+            $Result = json_decode(substr($SerializedString, 4), TRUE);
       }
-      return $SerializedString;
+      return $Result;
    }
 
 
@@ -467,7 +509,7 @@ class Format {
     * array of $Array[Property] => Value sets.
     *
     * @param array $Array An array to be converted to object.
-    * @return Gdn_ShellClass
+    * @return stdClass
     *
     * @todo could be just "return (object) $Array;"?
     */
@@ -475,7 +517,7 @@ class Format {
       if (!is_array($Array))
          return $Array;
 
-      $Return = new Gdn_ShellClass();
+      $Return = new stdClass();
       foreach($Array as $Property => $Value) {
          $Return->$Property = $Value;
       }
@@ -536,6 +578,13 @@ class Format {
             $Format = T('Date.DefaultFormat', '%B %e, %Y');
          }
       }
+
+      // Emulate %l and %e for Windows
+      if (strpos($Format, '%l') !== false)
+          $Format = str_replace('%l', ltrim(strftime('%I', $Timestamp), '0'), $Format);
+      if (strpos($Format, '%e') !== false)
+          $Format = str_replace('%e', ltrim(strftime('%d', $Timestamp), '0'), $Format);
+
       return strftime($Format, $Timestamp);
    }
    
@@ -560,13 +609,13 @@ class Format {
     * @return unknown
     */
    public static function ToTimestamp($DateTime = '') {
-      if (preg_match('/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/', $DateTime, $Matches)) {
+      if (preg_match('/^(\d{4})-(\d{2})-(\d{2})(?:\s{1}(\d{2}):(\d{2})(?::(\d{2}))?)?$/', $DateTime, $Matches)) {
          $Year = $Matches[1];
          $Month = $Matches[2];
          $Day = $Matches[3];
-         $Hour = $Matches[4];
-         $Minute = $Matches[5];
-         $Second = $Matches[6];
+         $Hour = ArrayValue(4, $Matches, 0);
+         $Minute = ArrayValue(5, $Matches, 0);
+         $Second = ArrayValue(6, $Matches, 0);
          return mktime($Hour, $Minute, $Second, $Month, $Day, $Year);
       } elseif (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $DateTime, $Matches)) {
          $Year = $Matches[1];

@@ -16,8 +16,8 @@ ini_set('track_errors', 1);
 ob_start();
 
 // 1. Define the constants we need to get going.
-define('APPLICATION', 'Garden');
-define('APPLICATION_VERSION', '1.0');
+define('APPLICATION', 'Vanilla');
+define('APPLICATION_VERSION', '2.0 rc1');
 
 define('DS', DIRECTORY_SEPARATOR);
 define('PATH_ROOT', dirname(__FILE__));
@@ -26,8 +26,8 @@ define('PATH_ROOT', dirname(__FILE__));
 require_once(PATH_ROOT.DS.'bootstrap.php');
 
 // 3. Start the application.
-if(strpos(Gdn_Url::Request(), 'gardensetup') === FALSE)
-Gdn::Session()->Start(Gdn::Authenticator());
+if (substr(Gdn::Request()->Path(),0,15) != 'dashboard/setup')
+   Gdn::Session()->Start(Gdn::Authenticator());
 
 $Dispatcher = Gdn::Dispatcher();
 
@@ -35,7 +35,6 @@ $EnabledApplications = Gdn::Config('EnabledApplications');
 $Dispatcher->EnabledApplicationFolders($EnabledApplications);
 
 $Dispatcher->PassProperty('EnabledApplications', $EnabledApplications);
-$Dispatcher->Routes = Gdn::Config('Routes');
 
 // Process the request.
 $Dispatcher->Dispatch();

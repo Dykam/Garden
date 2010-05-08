@@ -56,6 +56,9 @@ if (!function_exists('Anchor')) {
  */
 if (!function_exists('FormatPossessive')) {
    function FormatPossessive($Word) {
+		if(function_exists('FormatPossessiveCustom'))
+			return FormatPossesiveCustom($Word);
+			
       return substr($Word, -1) == 's' ? $Word."'" : $Word."'s";
    }
 }
@@ -133,5 +136,16 @@ if (!function_exists('UserPhoto')) {
       } else {
          return '';
       }
+   }
+}
+/**
+ * Wrap the provided string in the specified tag. ie. Wrap('This is bold!', 'b');
+ */
+if (!function_exists('Wrap')) {
+   function Wrap($String, $Tag = 'span', $Attributes = '') {
+      if (is_array($Attributes))
+         $Attributes = Attribute($Attributes);
+         
+      return '<'.$Tag.$Attributes.'>'.$String.'</'.$Tag.'>';
    }
 }

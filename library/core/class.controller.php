@@ -32,7 +32,7 @@ class Gdn_Controller extends Gdn_Pluggable {
 
    /**
     * The name of the application folder that this controller can be found in
-    * (ie. vanilla, garden, etc).
+    * (ie. vanilla, dashboard, etc).
     *
     * @var string
     */
@@ -151,15 +151,6 @@ class Gdn_Controller extends Gdn_Pluggable {
     * @var string
     */
    public $RequestMethod;
-
-   /**
-    * An array of routes and where they should be redirected to (assigned to
-    * the dispatcher in the main bootstrap, and then assigned by reference
-    * from the dispatcher.
-    *
-    * @var array
-    */
-   public $Routes;
 
    /**
     * The requested url to this controller.
@@ -294,7 +285,6 @@ class Gdn_Controller extends Gdn_Pluggable {
       $this->RedirectUrl = '';
       $this->RequestMethod = '';
       $this->RequestArgs = FALSE;
-      $this->Routes = array();
       $this->SelfUrl = '';
       $this->StatusMessage = '';
       $this->SyndicationMethod = SYNDICATION_NONE;
@@ -384,6 +374,20 @@ class Gdn_Controller extends Gdn_Pluggable {
    }
 
    /**
+    * Removes a JS file from the collection.
+    *
+    * @param string $FileName The CSS file to search for.
+    */
+   public function RemoveJsFile($FileName) {
+      foreach ($this->_JsFiles as $Key => $FileInfo) {
+         if ($FileInfo['FileName'] == $FileName) {
+            unset($this->_JsFiles[$Key]);
+            return;
+         }
+      }
+   }
+
+   /**
     * Adds the specified module to the specified asset target. If no asset
     * target is defined, it will use the asset target defined by the module's
     * AssetTarget method.
@@ -435,6 +439,9 @@ class Gdn_Controller extends Gdn_Pluggable {
 
       if (!array_key_exists('WebRoot', $this->_Definitions))
          $this->_Definitions['WebRoot'] = Gdn_Url::WebRoot(TRUE);
+
+      if (!array_key_exists('UrlRoot', $this->_Definitions))
+         $this->_Definitions['UrlRoot'] = substr(Url(' '), 0, -2);
 
       if (!array_key_exists('ConfirmHeading', $this->_Definitions))
          $this->_Definitions['ConfirmHeading'] = T('Confirm');
@@ -535,6 +542,9 @@ class Gdn_Controller extends Gdn_Pluggable {
 
       if (strtolower(substr($ControllerName, -10, 10)) == 'controller')
          $ControllerName = substr($ControllerName, 0, -10);
+
+      if (strtolower(substr($ControllerName, 0, 4)) == 'gdn_')
+         $ControllerName = substr($ControllerName, 4);
 
       if ($ApplicationFolder == '')
          $ApplicationFolder = $this->ApplicationFolder;
@@ -746,9 +756,7 @@ class Gdn_Controller extends Gdn_Pluggable {
          // Format the view as JSON with some extra information about the
          // success status of the form so that jQuery knows what to do
          // with the result.
-         $FormSaved = FALSE;
-         if (property_exists($this, 'Form') && $this->Form->ErrorCount() == 0)
-            $FormSaved = TRUE;
+         $FormSaved = (property_exists($this, 'Form') && $this->Form->ErrorCount() == 0) ? TRUE : FALSE;
 
          $this->SetJson('FormSaved', $FormSaved);
          $this->SetJson('DeliveryType', $this->_DeliveryType);
@@ -777,7 +785,7 @@ class Gdn_Controller extends Gdn_Pluggable {
          } else if ($this->_DeliveryType == DELIVERY_TYPE_ALL) {
             // Add definitions to the page
             if ($this->SyndicationMethod === SYNDICATION_NONE)
-               $this->AddAsset($AssetName, $this->DefinitionList());
+               $this->AddAsset('Foot', $this->DefinitionList());
 
             // Render
             $this->RenderMaster();
@@ -843,13 +851,19 @@ class Gdn_Controller extends Gdn_Pluggable {
 
          // Only get css & ui components if this is NOT a syndication request
          if ($this->SyndicationMethod == SYNDICATION_NONE && is_object($this->Head)) {
+            if (ArrayHasValue($this->_CssFiles, 'style.css'))
+               $this->AddCssFile('custom.css');
+               
+            if (ArrayHasValue($this->_CssFiles, 'admin.css'))
+               $this->AddCssFile('customadmin.css');
+            
             // And now search for/add all css files
             foreach ($this->_CssFiles as $CssInfo) {
                $CssFile = $CssInfo['FileName'];
                
                if(strpos($CssFile, '/') !== FALSE) {
                   // A direct path to the file was given.
-                  $CssPaths = array(PATH_ROOT.str_replace('/', DS, $CssFile));
+                  $CssPaths = array(CombinePaths(array(PATH_ROOT, str_replace('/', DS, $CssFile))));
                } else {
                   $CssGlob = preg_replace('/(.*)(\.css)/', '\1*\2', $CssFile);
                   $AppFolder = $CssInfo['AppFolder'];
@@ -860,14 +874,14 @@ class Gdn_Controller extends Gdn_Pluggable {
                   $CssPaths = array();
                   if ($this->Theme) {
                      // 1. Application-specific css. eg. root/themes/theme_name/app_name/design/
-                     $CssPaths[] = PATH_THEMES . DS . $this->Theme . DS . $AppFolder . DS . 'design' . DS . $CssGlob;
-                     // 2. Garden-wide theme view. eg. root/themes/theme_name/design/
-                     $CssPaths[] = PATH_THEMES . DS . $this->Theme . DS . 'design' . DS . $CssGlob;
+                     // $CssPaths[] = PATH_THEMES . DS . $this->Theme . DS . $AppFolder . DS . 'design' . DS . $CssGlob;
+                     // 2. Theme-wide theme view. eg. root/themes/theme_name/design/
+                     $CssPaths[] = PATH_THEMES . DS . $this->Theme . DS . 'design' . DS . $CssFile;
                   }
                   // 3. Application default. eg. root/applications/app_name/design/
-                  $CssPaths[] = PATH_APPLICATIONS . DS . $AppFolder . DS . 'design' . DS . $CssGlob;
-                  // 4. Garden default. eg. root/applications/garden/design/
-                  $CssPaths[] = PATH_APPLICATIONS . DS . 'garden' . DS . 'design' . DS . $CssGlob;
+                  $CssPaths[] = PATH_APPLICATIONS . DS . $AppFolder . DS . 'design' . DS . $CssFile;
+                  // 4. Garden default. eg. root/applications/dashboard/design/
+                  $CssPaths[] = PATH_APPLICATIONS . DS . 'dashboard' . DS . 'design' . DS . $CssFile;
                }
 
                // Find the first file that matches the path.
@@ -887,11 +901,8 @@ class Gdn_Controller extends Gdn_Pluggable {
                }
                
                if ($CssPath !== FALSE) {
-                  $CssPath = str_replace(
-                     array(PATH_ROOT, DS),
-                     array('', '/'),
-                     $CssPath
-                  );
+                  $CssPath = substr($CssPath, strlen(PATH_ROOT));
+                  $CssPath = str_replace(DS, '/', $CssPath);
                   $this->Head->AddCss($CssPath, 'screen');
                }
             }
@@ -964,8 +975,8 @@ class Gdn_Controller extends Gdn_Pluggable {
          }
          // 3. Application default. eg. root/app_name/views/
          $MasterViewPaths[] = CombinePaths(array(PATH_APPLICATIONS, $this->ApplicationFolder, 'views', $this->MasterView . '.master*'));
-         // 4. Garden default. eg. root/garden/views/
-         $MasterViewPaths[] = CombinePaths(array(PATH_APPLICATIONS, 'garden', 'views', $this->MasterView . '.master*'));
+         // 4. Garden default. eg. root/dashboard/views/
+         $MasterViewPaths[] = CombinePaths(array(PATH_APPLICATIONS, 'dashboard', 'views', $this->MasterView . '.master*'));
       }
       
       // Find the first file that matches the path.
@@ -984,15 +995,20 @@ class Gdn_Controller extends Gdn_Pluggable {
       
       /// A unique identifier that can be used in the body tag of the master view if needed.
       $ControllerName = $this->ClassName;
+      // Strip "Controller" from the body identifier.
       if (substr($ControllerName, -10) == 'Controller')
-         $ControllerName = substr($ControllerName, 0, -10); // Strip "Controller" from the body identifier.
+         $ControllerName = substr($ControllerName, 0, -10); 
          
+      // Strip "Gdn_" from the body identifier.
+      if (substr($ControllerName, 0, 4) == 'Gdn_')
+         $ControllerName = substr($ControllerName, 4); 
+
       $this->SetData('CssClass', $this->Application.' '.$ControllerName.' '.$this->RequestMethod.' '.$this->CssClass, TRUE);
      
       // Check to see if there is a handler for this particular extension.
       $ViewHandler = Gdn::Factory('ViewHandler' . strtolower(strrchr($MasterViewPath, '.')));
       if(is_null($ViewHandler)) {
-         $BodyIdentifier = strtolower($this->ApplicationFolder.'_'.$ControllerName.'_'.Format::AlphaNumeric(strtolower($this->RequestMethod)));
+         $BodyIdentifier = strtolower($this->ApplicationFolder.'_'.$ControllerName.'_'.Gdn_Format::AlphaNumeric(strtolower($this->RequestMethod)));
          include($MasterViewPath);
       } else {
          $ViewHandler->Render($MasterViewPath, $this);
@@ -1013,7 +1029,7 @@ class Gdn_Controller extends Gdn_Pluggable {
         if (!$Session->IsValid()) {
            Redirect(Gdn::Authenticator()->SignInUrl($this->SelfUrl));
         } else {
-          Redirect($this->Routes['DefaultPermission']);
+           Redirect(Gdn::Router()->GetDestination('DefaultPermission'));
         }
       }
 

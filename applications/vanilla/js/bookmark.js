@@ -14,7 +14,7 @@ jQuery(document).ready(function($) {
          error: function(XMLHttpRequest, textStatus, errorThrown) {
             // Popup the error
             $(btn).attr('class', oldClass);
-            $.popup({}, definition('TransportError').replace('%s', textStatus));
+            $.popup({}, XMLHttpRequest.responseText);
          },
          success: function(json) {
             // Remove this row if looking at a list of bookmarks
@@ -33,9 +33,9 @@ jQuery(document).ready(function($) {
                   $(btn).addClass('Bookmarked');
                   
             }
-            $('a.MyBookmarks').html(json.MenuLink);
+            $('a.MyBookmarks').html(json.MenuText+'<span>'+json.CountBookmarks+'</span>');
             // Add/remove the bookmark from the side menu.
-            processTargets(json.Targets);
+            gdn.processTargets(json.Targets);
          }
       });
       return false;

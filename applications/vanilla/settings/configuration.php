@@ -3,7 +3,7 @@
 // All of the settings defined here can be overridden in the /conf/config.php file.
 
 $Configuration['Vanilla']['Installed'] = '0';
-$Configuration['Vanilla']['Comment']['MaxLength']              = '2000';
+$Configuration['Vanilla']['Comment']['MaxLength']              = '8000';
 
 // Spam settings explained:
 // Users cannot post more than $SpamCount comments within $SpamTime seconds or
@@ -17,6 +17,6 @@ $Configuration['Vanilla']['Discussion']['SpamLock']            = '120';
 
 $Configuration['Vanilla']['Comments']['PerPage']               = '100';
 $Configuration['Vanilla']['Discussions']['PerCategory']        = '5';
-$Configuration['Vanilla']['Discussions']['PerPage']            = '60';
+$Configuration['Vanilla']['Discussions']['PerPage']            = '50';
 $Configuration['Vanilla']['Discussions']['Home']               = 'discussions';
 $Configuration['Vanilla']['Categories']['Use']                 = TRUE;

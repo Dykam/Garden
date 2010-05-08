@@ -24,7 +24,7 @@ class Gdn_Dispatcher extends Gdn_Pluggable {
    /**
     * An array of folders within the application that are OK to search through
     * for controllers. This property is filled by the applications array
-    * located in /conf/applications.php and included in /garden/bootstrap.php
+    * located in /conf/applications.php and included in /bootstrap.php
     *
     * @var array
     */
@@ -33,7 +33,7 @@ class Gdn_Dispatcher extends Gdn_Pluggable {
    /**
     * An associative array of ApplicationName => ApplicationFolder. This
     * property is filled by the applications array located in
-    * /conf/applications.php and included in /garden/bootstrap.php
+    * /conf/applications.php and included in /bootstrap.php
     *
     * @var array
     */
@@ -45,14 +45,6 @@ class Gdn_Dispatcher extends Gdn_Pluggable {
     * @var string
     */
    public $Request;
-
-   /**
-    * An array of routes and where they should be redirected to (assigned in
-    * the main bootstrap).
-    *
-    * @var array
-    */
-   public $Routes;
 
    /**
     * The name of the application folder that contains the controller that has
@@ -119,9 +111,9 @@ class Gdn_Dispatcher extends Gdn_Pluggable {
     * Class constructor.
     */
    public function __construct() {
+      parent::__construct();
       $this->_EnabledApplicationFolders = array();
       $this->Request = '';
-      $this->Routes = array();
       $this->_ApplicationFolder = '';
       $this->_AssetCollection = array();
       $this->_ControllerFolder = '';
@@ -142,13 +134,30 @@ class Gdn_Dispatcher extends Gdn_Pluggable {
     * Analyzes the supplied query string and decides how to dispatch the
     * request.
     */
-   public function Dispatch() {
+   public function Dispatch($Request=NULL) {
+   
+      if (Gdn::Config('Garden.UpdateMode', FALSE)) {
+         if (!Gdn::Session()->CheckPermission('Garden.Settings.GlobalPrivs')) {
+            // Updatemode, and this user is not root admin
+            Gdn::Request()->WithURI(Gdn::Router()->GetDestination('UpdateMode'));
+         }
+      }
+   
+      if ($Request !== NULL && is_a($Request,'Gdn_Request'))
+         Gdn::Request()->FromImport($Request);
+      
+      $this->FireEvent('BeforeDispatch');
       $this->_AnalyzeRequest();
-
-      //echo '<br />App folder: '.$this->_ApplicationFolder;
-      //echo '<br />Controller folder: '.$this->_ControllerFolder;
-      //echo '<br />ControllerName: '.$this->_ControllerName;
-      //echo '<br />ControllerMethod: '.$this->_ControllerMethod;
+      
+      /*
+      echo "<br />Gdn::Request thinks: ".Gdn::Request()->Path();
+      echo "<br />Gdn::Request also suggests: output=".Gdn::Request()->OutputFormat().", filename=".Gdn::Request()->Filename();
+      echo '<br />Request: '.$this->Request;      
+      echo '<br />App folder: '.$this->_ApplicationFolder;
+      echo '<br />Controller folder: '.$this->_ControllerFolder;
+      echo '<br />ControllerName: '.$this->_ControllerName;
+      echo '<br />ControllerMethod: '.$this->_ControllerMethod;
+      */
 
       $ControllerName = $this->ControllerName();
       if ($ControllerName != '' && class_exists($ControllerName)) {
@@ -178,12 +187,10 @@ class Gdn_Dispatcher extends Gdn_Pluggable {
             $Controller->$Name = $Mixed;
          }
 
-         // Pass in the routes
-         $Controller->Routes = $this->Routes;
-
          // Set up a default controller method in case one isn't defined.
          $ControllerMethod = str_replace('_', '', $this->_ControllerMethod);
          $Controller->OriginalRequestMethod = $ControllerMethod;
+         
          // Take enabled plugins into account, as well
          $PluginManager = Gdn::Factory('PluginManager');
          $PluginManagerHasReplacementMethod = $PluginManager->HasNewMethod($this->ControllerName(), $this->_ControllerMethod);
@@ -248,7 +255,10 @@ class Gdn_Dispatcher extends Gdn_Pluggable {
               }
             }
          } else {
-            trigger_error(ErrorMessage('Controller method missing: '.$this->_ControllerName.'.'.$ControllerMethod.'();', 'Dispatcher', 'Dispatch'), E_USER_ERROR);
+         
+            Gdn::Request()->WithURI(Gdn::Router()->GetDestination('Default404'));
+            return $this->Dispatch();
+            
          }
       }
 
@@ -336,51 +346,54 @@ class Gdn_Dispatcher extends Gdn_Pluggable {
       $this->_ControllerName = '';
       $this->_ControllerMethod = 'index';
       $this->_ControllerMethodArgs = array();
+      
+      $this->Request = Gdn::Request()->Path();
 
-      // Retrieve and parse the request
-      if ($this->Request == '') {
-         $this->Request = Gdn_Url::Request();
-         $Prefix = strtolower(substr($this->Request, 0, strpos($this->Request, '/')));
-         switch ($Prefix) {
-            case 'rss':
-               $this->_SyndicationMethod = SYNDICATION_RSS;
-               $this->Request = substr($this->Request, 4);
-               break;
-            case 'atom':
-               $this->_SyndicationMethod = SYNDICATION_ATOM;
-               $this->Request = substr($this->Request, 5);
-               break;
-            default:
-               $this->_SyndicationMethod = SYNDICATION_NONE;
-               break;
-         }
+      switch (Gdn::Request()->OutputFormat()) {
+         case 'rss':
+            $this->_SyndicationMethod = SYNDICATION_RSS;
+            break;
+         case 'atom':
+            $this->_SyndicationMethod = SYNDICATION_ATOM;
+            break;
+         case 'default':
+         default:
+            $this->_SyndicationMethod = SYNDICATION_NONE;
+            break;
       }
 
       if ($this->Request == '')
-         $this->Request = $this->Routes['DefaultController'];
+      {
+         $DefaultController = Gdn::Router()->GetRoute('DefaultController');
+         $this->Request = $DefaultController['Destination'];
+      }
 
       // Check for re-routing
-      // Is there a literal match?
-      if (isset($this->Routes[$this->Request])) {
-         $this->Request = $this->Routes[$this->Request];
-      } else {
-         // Check for other matching custom routes
-         foreach ($this->Routes as $Route => $Destination) {
-            // Check for wild-cards
-            $Route = str_replace(
-               array(':alphanum', ':num'),
-               array('([0-9a-zA-Z-_]+)', '([0-9]+)'),
-               $Route
-            );
-
-            // Check for a match
-            if (preg_match('#^'.$Route.'$#', $this->Request)) {
-               // Do we have a back-reference?
-               if (strpos($Destination, '$') !== FALSE && strpos($Route, '(') !== FALSE)
-                  $Destination = preg_replace('#^'.$Route.'$#', $Destination, $this->Request);
-
-               $this->Request = $Destination;
-            }
+      $MatchRoute = Gdn::Router()->MatchRoute($this->Request);
+      
+      // We have a route. Take action.
+      if ($MatchRoute !== FALSE) {
+         switch ($MatchRoute['Type']) {
+            case 'Internal':
+               $this->Request = $MatchRoute['FinalDestination'];
+               break;
+            
+            case 'Temporary':
+               Header( "HTTP/1.1 302 Moved Temporarily" );
+               Header( "Location: ".$MatchRoute['FinalDestination'] ); 
+               exit();
+               break;
+            
+            case 'Permanent':
+               Header( "HTTP/1.1 301 Moved Permanently" );
+               Header( "Location: ".$MatchRoute['FinalDestination'] );
+               exit();
+               break;
+            
+            case 'NotFound':
+               Header( "HTTP/1.1 404 Not Found" );
+               $this->Request = $MatchRoute['FinalDestination'];
+               break;
          }
       }
 
@@ -447,30 +460,29 @@ class Gdn_Dispatcher extends Gdn_Pluggable {
          if ($this->_ControllerFolder != '')
             $PathParts[] = $this->_ControllerFolder;
 
-         $PathParts[] = strtolower($this->_ControllerName).'.php';
+         $PathParts[] = 'class.'.strtolower($this->_ControllerName).'controller.php';
          $ControllerFileName = CombinePaths($PathParts);
 
-         // Force the mapping to search in the app folder if it was in the request
-         if ($this->_ApplicationFolder != '' && InArrayI($this->_ApplicationFolder, $ControllerWhiteList)) {
-            // Limit the white list to the specified application folder
+         // Limit the white list to the specified application folder if it was in the request
+         if ($this->_ApplicationFolder != '' && InArrayI($this->_ApplicationFolder, $ControllerWhiteList))
             $ControllerWhiteList = array($this->_ApplicationFolder);
-         }
 
-         $ControllerPath = Gdn_FileSystem::FindByMapping('controller_mappings.php', 'Controller', PATH_APPLICATIONS, $ControllerWhiteList, $ControllerFileName);
+         $ControllerPath = Gdn_FileSystem::FindByMapping('controller', PATH_APPLICATIONS, $ControllerWhiteList, $ControllerFileName);
          if ($ControllerPath !== FALSE) {
             // Strip the "Application Folder" from the controller path (this is
             // used by the controller for various purposes. ie. knowing which
             // application to search in for a view file).
             $this->_ApplicationFolder = explode(DS, str_replace(PATH_APPLICATIONS . DS, '', $ControllerPath));
             $this->_ApplicationFolder = $this->_ApplicationFolder[0];
+            $AppControllerName = strtolower($this->_ApplicationFolder).'Controller';
 
             // Load the application's master controller
-            if (!class_exists($this->_ApplicationFolder.'Controller'))
-               include(CombinePaths(array(PATH_APPLICATIONS, $this->_ApplicationFolder, 'controllers', 'appcontroller.php')));
+            if (!class_exists($AppControllerName))
+               require_once(CombinePaths(array(PATH_APPLICATIONS, $this->_ApplicationFolder, 'controllers', 'class.'.strtolower($this->_ApplicationFolder).'controller.php')));
 
             // Now load the library (no need to check for existence - couldn't
             // have made it here if it didn't exist).
-            include($ControllerPath);
+            require_once($ControllerPath);
          }
       }
       if (!class_exists($this->ControllerName())) {
@@ -478,12 +490,16 @@ class Gdn_Dispatcher extends Gdn_Pluggable {
             if (ForceBool(Gdn::Config('Garden.Debug'))) {
                trigger_error(ErrorMessage('Controller not found: '.$this->ControllerName(), 'Dispatcher', '_FetchController'), E_USER_ERROR);
             } else {
+               $MissingRoute = Gdn::Router()->GetRoute('Default404');
+            
                // Return a 404 message
-               list($this->_ApplicationFolder, $this->_ControllerName, $this->_ControllerMethod) = explode('/', $this->Routes['Default404']);
-               $ControllerFileName = CombinePaths(array('controllers', strtolower($this->_ControllerName) . '.php'));
-               $ControllerPath = Gdn_FileSystem::FindByMapping('controller_mappings.php', 'Controller', PATH_APPLICATIONS, $ControllerWhiteList, $ControllerFileName);
-               include(CombinePaths(array(PATH_APPLICATIONS, $this->_ApplicationFolder, 'controllers', 'appcontroller.php')));
-               include($ControllerPath);
+               list($this->_ApplicationFolder, $this->_ControllerName, $this->_ControllerMethod) = explode('/', $MissingRoute['Destination']);
+               $ControllerFileName = CombinePaths(array('controllers', 'class.' . strtolower($this->_ControllerName) . 'controller.php'));
+               $ControllerPath = Gdn_FileSystem::FindByMapping('controller', PATH_APPLICATIONS, $ControllerWhiteList, $ControllerFileName);
+               $this->_ApplicationFolder = explode(DS, str_replace(PATH_APPLICATIONS . DS, '', $ControllerPath));
+               $this->_ApplicationFolder = $this->_ApplicationFolder[0];
+               require_once(CombinePaths(array(PATH_APPLICATIONS, $this->_ApplicationFolder, 'controllers', 'class.'.strtolower($this->_ApplicationFolder).'controller.php')));
+               require_once($ControllerPath);
             }
          }
          return FALSE;
@@ -491,7 +507,7 @@ class Gdn_Dispatcher extends Gdn_Pluggable {
          return TRUE;
       }
    }
-
+   
    /**
     * An internal method used to map parts of the request to various properties
     * of this object that represent the controller, controller method, and

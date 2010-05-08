@@ -1,4 +1,4 @@
-// This file contains javascript that is specific to the garden/profile controller.
+// This file contains javascript that is specific to the dashboard/profile controller.
 jQuery(document).ready(function($) {
    
    $('a.ClearConversation').popup({
@@ -14,6 +14,7 @@ jQuery(document).ready(function($) {
    $.fn.handleMessageForm = function() {
       this.click(function() {
          var button = this;
+         $(button).attr('disabled', 'disabled');
          var frm = $(button).parents('form').get(0);
          var textbox = $(frm).find('textarea');
          // Post the form, and append the results to #Discussion, and erase the textbox
@@ -26,14 +27,15 @@ jQuery(document).ready(function($) {
          var lastMessage = $(messages).get(messages.length - 1);
          var lastMessageID = $(lastMessage).attr('id');
          postValues += '&' + prefix + 'LastMessageID=' + lastMessageID;
+         $(button).before('<span class="TinyProgress">&nbsp;</span>');
          $.ajax({
             type: "POST",
             url: $(frm).attr('action'),
             data: postValues,
             dataType: 'json',
             error: function(XMLHttpRequest, textStatus, errorThrown) {
-               $('.Popup').remove();
-               $.popup({}, definition('TransportError').replace('%s', textStatus));
+               $('div.Popup').remove();
+               $.popup({}, XMLHttpRequest.responseText);
             },
             success: function(json) {
                // Remove any old errors from the form
@@ -58,8 +60,13 @@ jQuery(document).ready(function($) {
                   if (target.offset()) {
                      $('html,body').animate({scrollTop: target.offset().top}, 'fast');
                   }
-                  inform(json.StatusMessage);
+                  gdn.inform(json.StatusMessage);
                }
+            },
+            complete: function(XMLHttpRequest, textStatus) {
+               // Remove any spinners, and re-enable buttons.
+               $('span.TinyProgress').remove();
+               $(frm).find(':submit').removeAttr("disabled");
             }
          });
          return false;
@@ -70,7 +77,7 @@ jQuery(document).ready(function($) {
    
    // Utility function to clear out the message form
    function clearMessageForm() {
-      $('.Popup').remove();
+      $('div.Popup').remove();
       var frm = $('#Form_ConversationMessage');
       frm.find('textarea').val('');
       frm.find('div.Errors').remove();
@@ -80,7 +87,7 @@ jQuery(document).ready(function($) {
    // Enable multicomplete on selected inputs
    $('.MultiComplete').livequery(function() {
       $(this).autocomplete(
-         combinePaths(definition('WebRoot'), 'index.php/garden/user/autocomplete/'),
+         gdn.combinePaths(gdn.definition('WebRoot'), 'index.php/dashboard/user/autocomplete/'),
          {
             minChars: 1,
             multiple: true,
@@ -98,7 +105,7 @@ jQuery(document).ready(function($) {
    $('#Form_AddPeople :submit').click(function() {
       var btn = this;
       $(btn).hide();
-      $(btn).after('<span class="Progress">&nbsp;</span>');
+      $(btn).before('<span class="TinyProgress">&nbsp;</span>');
       
       var frm = $(btn).parents('form');
       var textbox = $(frm).find('textarea');
@@ -112,10 +119,10 @@ jQuery(document).ready(function($) {
          error: function(XMLHttpRequest, textStatus, errorThrown) {
             $('span.Progress').remove();
             $(btn).show();
-            $.popup({}, definition('TransportError').replace('%s', textStatus));
+            $.popup({}, XMLHttpRequest.responseText);
          },
          success: function(json) {
-            inform(json.StatusMessage);
+            gdn.inform(json.StatusMessage);
             if (json.RedirectUrl)
               setTimeout("document.location='" + json.RedirectUrl + "';", 300);
          }

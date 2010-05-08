@@ -1,6 +1,14 @@
 <?php if (!defined('APPLICATION')) exit();
+/*
+Copyright 2008, 2009 Vanilla Forums Inc.
+This file is part of Garden.
+Garden is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+Garden is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+You should have received a copy of the GNU General Public License along with Garden.  If not, see <http://www.gnu.org/licenses/>.
+Contact Vanilla Forums Inc. at support [at] vanillaforums [dot] com
+*/
 
-class Gdn_CommentModel extends Gdn_VanillaModel {
+class CommentModel extends VanillaModel {
    /**
     * Class constructor.
     */
@@ -50,31 +58,37 @@ class Gdn_CommentModel extends Gdn_VanillaModel {
             
          if (is_numeric($Discussion->CountCommentWatch)) {
             // Update the watch data
-            $this->SQL->Put(
-               'UserDiscussion',
-               array(
-                  'CountComments' => $CountWatch,
-                  'DateLastViewed' => Format::ToDateTime()
-               ),
-               array(
-                  'UserID' => $Session->UserID,
-                  'DiscussionID' => $Discussion->DiscussionID,
-                  'CountComments <' => $CountWatch
-               )
-            );
+				if($CountWatch != $Discussion->CountCommentWatch && $CountWatch > $Discussion->CountCommentWatch) {
+					// Only update the watch if there are new comments.
+					$this->SQL->Put(
+						'UserDiscussion',
+						array(
+							'CountComments' => $CountWatch,
+                  'DateLastViewed' => Gdn_Format::ToDateTime()
+						),
+						array(
+							'UserID' => $Session->UserID,
+							'DiscussionID' => $Discussion->DiscussionID
+						)
+					);
+				}
          } else {
-            // Insert watch data
-            $this->SQL->Insert(
-               'UserDiscussion',
-               array(
-                  'UserID' => $Session->UserID,
-                  'DiscussionID' => $Discussion->DiscussionID,
-                  'CountComments' => $CountWatch,
-                  'DateLastViewed' => Format::ToDateTime()
-               )
-            );
-         }
-      }
+				// Make sure the discussion isn't archived.
+				$ArchiveDate = Gdn::Config('Vanilla.Archive.Date');
+				if(!$ArchiveDate || (Gdn_Format::ToTimestamp($Discussion->DateLastComment) > Gdn_Format::ToTimestamp($ArchiveDate))) {
+					// Insert watch data
+					$this->SQL->Insert(
+						'UserDiscussion',
+						array(
+							'UserID' => $Session->UserID,
+							'DiscussionID' => $Discussion->DiscussionID,
+							'CountComments' => $CountWatch,
+                  'DateLastViewed' => Gdn_Format::ToDateTime()
+						)
+					);
+				}
+			}
+		}
    }
 
    public function GetCount($DiscussionID) {
@@ -164,7 +178,7 @@ class Gdn_CommentModel extends Gdn_VanillaModel {
             $Fields = $this->Validation->SchemaValidationFields();
             $Fields = RemoveKeyFromArray($Fields, $this->PrimaryKey);
             
-            $DiscussionModel = new Gdn_DiscussionModel();
+            $DiscussionModel = new DiscussionModel();
             $DiscussionID = ArrayValue('DiscussionID', $Fields);
             $Discussion = $DiscussionModel->GetID($DiscussionID);
             if ($Insert === FALSE) {
@@ -184,14 +198,14 @@ class Gdn_CommentModel extends Gdn_VanillaModel {
                $Story = ArrayValue('Body', $Fields, '');
                $NotifiedUsers = array();
                foreach ($Usernames as $Username) {
-                  $User = $UserModel->GetWhere(array('Name' => $Username))->FirstRow();
+                  $User = $UserModel->GetByUsername($Username);
                   if ($User && $User->UserID != $Session->UserID) {
                      $NotifiedUsers[] = $User->UserID;   
-                     $ActivityModel = new Gdn_ActivityModel();   
+                     $ActivityModel = new ActivityModel();   
                      $ActivityID = $ActivityModel->Add(
                         $Session->UserID,
                         'CommentMention',
-                        Anchor(Format::Text($Discussion->Name), 'discussion/comment/'.$CommentID.'/#Comment_'.$CommentID),
+                        Anchor(Gdn_Format::Text($Discussion->Name), 'discussion/comment/'.$CommentID.'/#Comment_'.$CommentID),
                         $User->UserID,
                         '',
                         'discussion/comment/'.$CommentID.'/#Comment_'.$CommentID,
@@ -206,11 +220,11 @@ class Gdn_CommentModel extends Gdn_VanillaModel {
                foreach ($BookmarkData->Result() as $Bookmark) {
                   if (!in_array($Bookmark->UserID, $NotifiedUsers) && $Bookmark->UserID != $Session->UserID) {
                      $NotifiedUsers[] = $Bookmark->UserID;
-                     $ActivityModel = new Gdn_ActivityModel();   
+                     $ActivityModel = new ActivityModel();   
                      $ActivityID = $ActivityModel->Add(
                         $Session->UserID,
                         'BookmarkComment',
-                        Anchor(Format::Text($Discussion->Name), 'discussion/comment/'.$CommentID.'/#Comment_'.$CommentID),
+                        Anchor(Gdn_Format::Text($Discussion->Name), 'discussion/comment/'.$CommentID.'/#Comment_'.$CommentID),
                         $Bookmark->UserID,
                         '',
                         'discussion/comment/'.$CommentID.'/#Comment_'.$CommentID,
@@ -264,7 +278,7 @@ class Gdn_CommentModel extends Gdn_VanillaModel {
          AddActivity(
             $ActivityUserID,
             'DiscussionComment',
-            Anchor(Format::Text($Discussion->Name), 'discussion/comment/'.$CommentID.'/#Comment_'.$CommentID),
+            Anchor(Gdn_Format::Text($Discussion->Name), 'discussion/comment/'.$CommentID.'/#Comment_'.$CommentID),
             $Discussion->InsertUserID,
             'discussion/comment/'.$CommentID.'/#Comment_'.$CommentID
          );
@@ -296,18 +310,26 @@ class Gdn_CommentModel extends Gdn_VanillaModel {
             $this->SQL->Set('DateLastComment', $Data->DateLastComment);
 
          $this->SQL->Set('LastCommentID', $Data->LastCommentID)
-            ->Set('CountComments', $Data->CountComments)
+            ->Set('CountComments', $Data->CountComments + 1)
             ->Where('DiscussionID', $DiscussionID)
             ->Put();
+				
+			// Update the last comment's user ID.
+			$this->SQL
+				->Update('Discussion d')
+				->Update('Comment c')
+				->Set('d.LastCommentUserID', 'c.InsertUserID', FALSE)
+				->Where('d.DiscussionID', $DiscussionID)
+				->Where('c.CommentID', 'd.LastCommentID', FALSE, FALSE);
+			$this->SQL->Put();
       }
    }
    
    public function UpdateUser($UserID) {
-      // Retrieve a comment count (don't include FirstCommentIDs)
+      // Retrieve a comment count
       $CountComments = $this->SQL
          ->Select('c.CommentID', 'count', 'CountComments')
          ->From('Comment c')
-         ->Join('Discussion d', 'c.DiscussionID = d.DiscussionID and c.CommentID <> d.FirstCommentID')
          ->Where('c.InsertUserID', $UserID)
          ->Get()
          ->FirstRow()
@@ -324,9 +346,9 @@ class Gdn_CommentModel extends Gdn_VanillaModel {
    public function Delete($CommentID) {
       $this->EventArguments['CommentID'] = $CommentID;
 
-      // Check to see if this is the first or last comment in the discussion
+      // Check to see if this is the last comment in the discussion
       $Data = $this->SQL
-         ->Select('d.DiscussionID, d.FirstCommentID, d.LastCommentID, c.InsertUserID')
+         ->Select('d.DiscussionID, d.LastCommentID, c.InsertUserID')
          ->From('Discussion d')
          ->Join('Comment c', 'd.DiscussionID = c.DiscussionID')
          ->Where('c.CommentID', $CommentID)
@@ -334,32 +356,28 @@ class Gdn_CommentModel extends Gdn_VanillaModel {
          ->FirstRow();
          
       if ($Data) {
-         if ($Data->FirstCommentID == $CommentID) {
-            $DiscussionModel = new Gdn_DiscussionModel();
-            $DiscussionModel->Delete($Data->DiscussionID);
-         } else {
-            // If this is the last comment, get the one before and update the LastCommentID field
-            if ($Data->LastCommentID == $CommentID) {
-               $OldData = $this->SQL
-                  ->Select('c.CommentID')
-                  ->From('Comment c')
-                  ->Where('c.DiscussionID', $Data->DiscussionID)
-                  ->OrderBy('c.DateInserted', 'desc')
-                  ->Limit(1, 1)
-                  ->Get()
-                  ->FirstRow();
-               if (is_object($OldData)) {
-                  $this->SQL->Update('Discussion')
-                     ->Set('LastCommentID', $OldData->CommentID)
-                     ->Where('DiscussionID', $Data->DiscussionID)
-                     ->Put();
-               }
-            }
-            
-            $this->FireEvent('DeleteComment');
-            // Delete the comment
-            $this->SQL->Delete('Comment', array('CommentID' => $CommentID));
-         }
+			// If this is the last comment, get the one before and update the LastCommentID field
+			if ($Data->LastCommentID == $CommentID) {
+				$OldData = $this->SQL
+					->Select('c.CommentID')
+					->From('Comment c')
+					->Where('c.DiscussionID', $Data->DiscussionID)
+					->OrderBy('c.DateInserted', 'desc')
+					->Limit(1, 1)
+					->Get()
+					->FirstRow();
+				if (is_object($OldData)) {
+					$this->SQL->Update('Discussion')
+						->Set('LastCommentID', $OldData->CommentID)
+						->Where('DiscussionID', $Data->DiscussionID)
+						->Put();
+				}
+			}
+			
+			$this->FireEvent('DeleteComment');
+			// Delete the comment
+			$this->SQL->Delete('Comment', array('CommentID' => $CommentID));
+
          // Update the user's comment count
          $this->UpdateUser($Data->InsertUserID);
       }

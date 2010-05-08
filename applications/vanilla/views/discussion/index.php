@@ -1,5 +1,8 @@
 <?php if (!defined('APPLICATION')) exit();
 $Session = Gdn::Session();
+if (!function_exists('WriteComment'))
+   include($this->FetchViewLocation('helper_functions', 'discussion'));
+
 if ($Session->IsValid()) {
    // Bookmark link
    echo Anchor(
@@ -14,13 +17,13 @@ if ($Session->IsValid()) {
    <ul>
       <li><?php
          if (Gdn::Config('Vanilla.Categories.Use') === TRUE) {
-            echo Anchor($this->Discussion->Category, 'categories/'.$this->Discussion->CategoryID.'/'.Format::Url($this->Discussion->Category));
+            echo Anchor($this->Discussion->Category, 'categories/'.$this->Discussion->CategoryUrlCode);
          } else {
             echo Anchor(T('All Discussions'), 'discussions');
          }
       ?></li>
    </ul>
-   <div class="SubTab"><?php echo Format::Text($this->Discussion->Name); ?></div>
+   <div class="SubTab"><?php echo Gdn_Format::Text($this->Discussion->Name); ?></div>
 </div>
 <?php
    echo $this->Pager->ToString('less');

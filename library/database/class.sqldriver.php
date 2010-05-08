@@ -842,6 +842,7 @@ abstract class Gdn_SQLDriver {
     * @param string $OrderDirection The direction of the sort.
     * @param int    $Limit The number of records to limit the query to.
     * @param int    $PageNumber The offset where the query results should begin.
+    * @return Gdn_DataSet The data returned by the query.
     */
    public function GetWhere($Table = '', $Where = FALSE, $OrderFields = '', $OrderDirection = 'asc', $Limit = FALSE, $PageNumber = FALSE) {
       if ($Table != '') {
@@ -984,9 +985,9 @@ abstract class Gdn_SQLDriver {
    public function History($UpdateFields = TRUE, $InsertFields = FALSE) {
       $UserID = Gdn::Session()->UserID;
       if($InsertFields)
-         $this->Set('DateInserted', Format::ToDateTime())->Set('InsertUserID', $UserID);
+         $this->Set('DateInserted', Gdn_Format::ToDateTime())->Set('InsertUserID', $UserID);
       if($UpdateFields)
-         $this->Set('DateUpdated', Format::ToDateTime())->Set('UpdateUserID', $UserID);
+         $this->Set('DateUpdated', Gdn_Format::ToDateTime())->Set('UpdateUserID', $UserID);
       return $this;
    }
 
@@ -1201,7 +1202,7 @@ abstract class Gdn_SQLDriver {
       }
       
       // Map the alias to the alias mapping array
-      $TableString = trim(preg_replace('/\w+as\w+/i', ' ', $TableString));
+      $TableString = trim(preg_replace('/\s+as\s+/i', ' ', $TableString));
       $Alias = strrchr($TableString, " ");
       $TableName = substr($TableString, 0, strlen($TableString) - strlen($Alias));
    
@@ -1632,7 +1633,7 @@ abstract class Gdn_SQLDriver {
     * existing one.
     */
    public function Set($Field, $Value = '', $EscapeString = TRUE, $CreateNewNamedParameter = TRUE) {
-      $Field = Format::ObjectAsArray($Field);
+      $Field = Gdn_Format::ObjectAsArray($Field);
 
       if (!is_array($Field))
          $Field = array($Field => $Value);
@@ -1736,7 +1737,7 @@ abstract class Gdn_SQLDriver {
     */
    public function Version() {
       $Query = $this->Query($this->FetchVersionSql());
-      return $Query->Row('version');
+      return $Query->Value('version');
    }
    
    /**

@@ -9,13 +9,9 @@ Contact Vanilla Forums Inc. at support [at] vanillaforums [dot] com
 */
 
 /**
- * Garden.Modules
- */
-
-/**
  * Renders a form that allows people to be added to conversations.
  */
-class AddPeopleModule extends Module {
+class AddPeopleModule extends Gdn_Module {
 
    public $Conversation;
    public $Form;
@@ -34,7 +30,7 @@ class AddPeopleModule extends Module {
          $UserModel = Gdn::Factory("UserModel");
          foreach ($NewRecipients as $Name) {
             if (trim($Name) != '') {
-               $User = $UserModel->Get(trim($Name));
+               $User = $UserModel->GetByUsername(trim($Name));
                if (is_object($User))
                   $NewRecipientUserIDs[] = $User->UserID;
             }

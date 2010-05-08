@@ -40,7 +40,7 @@ class Gdn_Database {
    private $_CurrentResultSet;
    
    /** @var PDO The connectio to the database. */
-   protected $_Connection = FALSE;
+   protected $_Connection = NULL;
    
    
    protected $_SQL = NULL;
@@ -51,7 +51,7 @@ class Gdn_Database {
     * @return PDO The connection to the database.
     */
    public function Connection() {
-      if($this->_Connection === FALSE) {
+      if(!is_object($this->_Connection)) {
          try {
             $this->_Connection = new PDO(strtolower($this->Engine) . ':' . $this->Dsn, $this->User, $this->Password, $this->ConnectionOptions);
 	    if($this->ConnectionOptions[1002])
@@ -101,9 +101,9 @@ class Gdn_Database {
    }
    
    public function CloseConnection() {
-      if (Gdn::Config('Database.PersistentConnection') !== TRUE) {
+      if (!Gdn::Config('Database.PersistentConnection')) {
          $this->CommitTransaction();
-         $this->_Connection = null;
+         $this->_Connection = NULL;
       }
    }
    
@@ -190,7 +190,7 @@ class Gdn_Database {
             if(empty($Port)) {
                $Dsn = sprintf('host=%s;dbname=%s;', $Host, $Dbname);
             } else {
-               $Dsn = sprintf('host=%s;port=%s;dbname=$s;', $Host, $Port, $Dbname);
+               $Dsn = sprintf('host=%s;port=%s;dbname=%s;', $Host, $Port, $Dbname);
             }
          }
       }
@@ -204,7 +204,11 @@ class Gdn_Database {
     * @param string $Sql A string of SQL to be executed.
     * @param array $InputParameters An array of values with as many elements as there are bound parameters in the SQL statement being executed.
     */
-   public function Query($Sql, $InputParameters = NULL) {
+   public function Query($Sql, $InputParameters = NULL, $Event = '') {
+		if($Event) {
+			// TODO: Raise an event so the query can be overridden.
+		}
+		
       if ($Sql == '')
          trigger_error(ErrorMessage('Database was queried with an empty string.', $this->ClassName, 'Query'), E_USER_ERROR);
 
@@ -212,7 +216,7 @@ class Gdn_Database {
       if (!is_null($InputParameters) && count($InputParameters) > 0) {
          // Make sure other unbufferred queries are not open
          if (is_object($this->_CurrentResultSet)) {
-            $this->_CurrentResultSet->FetchAllRows();
+            $this->_CurrentResultSet->Result();
             $this->_CurrentResultSet->FreePDOStatement(FALSE);
          }
 

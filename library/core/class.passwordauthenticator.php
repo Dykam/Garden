@@ -90,7 +90,7 @@ class Gdn_PasswordAuthenticator extends Gdn_Pluggable implements Gdn_IAuthentica
 
 
    /**
-    * @param Gdn_UserModel $UserModel
+    * @param UserModel $UserModel
     */
    public function SetUserModel($UserModel) {
       $this->_UserModel = $UserModel;
@@ -176,7 +176,15 @@ class Gdn_PasswordAuthenticator extends Gdn_Pluggable implements Gdn_IAuthentica
       $Result = $this->_Identity->GetIdentity();
       if($Result < 0)
          $Result = 0;
+      
       return $Result;
+   }
+   
+   public function ReturningUser($User) {
+      if ($this->_Identity->HasVolatileMarker($User->UserID))
+         return FALSE;
+         
+      return TRUE;
    }
    
 	public function SetIdentity($Value, $Persist = FALSE) {

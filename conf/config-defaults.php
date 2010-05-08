@@ -5,7 +5,7 @@
 // values for configuration settings.
 $Configuration = array();
 
-$Configuration['EnabledApplications']['Garden'] = 'garden';
+$Configuration['EnabledApplications']['Dashboard']             = 'dashboard';
 
 $Configuration['Database']['Engine']                           = 'MySQL';
 $Configuration['Database']['Host']                             = 'dbhost';
@@ -30,7 +30,7 @@ $Configuration['Garden']['Title']                               = 'Vanilla 2';
 $Configuration['Garden']['Domain']                              = '';
 $Configuration['Garden']['WebRoot']                             = FALSE;
 $Configuration['Garden']['Debug']                               = FALSE;
-$Configuration['Garden']['RewriteUrls']                         = 'FALSE';
+$Configuration['Garden']['RewriteUrls']                         = FALSE;
 $Configuration['Garden']['Session']['Length']                   = '15 minutes';
 $Configuration['Garden']['Cookie']['Salt']                      = '';
 $Configuration['Garden']['Cookie']['Name']                      = 'Vanilla';
@@ -44,8 +44,7 @@ $Configuration['Garden']['Authenticator']['SignInUrl']          = '/entry/signin
 $Configuration['Garden']['Authenticator']['SignOutUrl']         = '/entry/leave/{Session_TransientKey}';
 $Configuration['Garden']['Errors']['LogEnabled']                = FALSE;
 $Configuration['Garden']['Errors']['LogFile']                   = '';
-$Configuration['Garden']['Errors']['MasterView']                = 'error.master.php';
-// $Configuration['Garden']['Errors']['MasterView']                = 'deverror.master.php'; // <-- Use this error master view when debugging
+$Configuration['Garden']['Errors']['MasterView']                = 'deverror.master.php'; // Used at installation time and you should use it too view when debugging
 $Configuration['Garden']['SignIn']['Popup']                     = TRUE; // Should the sign-in link pop up or go to it's own page? (SSO requires going to it's own external page)
 $Configuration['Garden']['UserAccount']['AllowEdit']            = TRUE; // Allow users to edit their account information? (SSO requires accounts be edited in external system).
 $Configuration['Garden']['Registration']['Method']              = 'Basic'; // Options are: Basic, Captcha, Approval, Invitation
@@ -53,7 +52,7 @@ $Configuration['Garden']['Registration']['DefaultRoles']        = array('8'); //
 $Configuration['Garden']['Registration']['ApplicantRoleID']     = 4; // The "Applicant" RoleID.
 $Configuration['Garden']['Registration']['InviteExpiration']    = '-1 week'; // The time before now that an invitation expires. ie. If an invitation was sent within the last week, it is still valid. This value will be plugged directly into strtotime()
 $Configuration['Garden']['Registration']['InviteRoles']         = 'FALSE';
-$Configuration['Garden']['TermsOfService']                      = '/garden/home/termsofservice'; // The url to the terms of service.
+$Configuration['Garden']['TermsOfService']                      = '/dashboard/home/termsofservice'; // The url to the terms of service.
 $Configuration['Garden']['Email']['UseSmtp']                    = FALSE;
 $Configuration['Garden']['Email']['SmtpHost']                   = '';
 $Configuration['Garden']['Email']['SmtpUser']                   = '';
@@ -68,7 +67,7 @@ $Configuration['Garden']['AddonUrl']                            = '';
 $Configuration['Garden']['CanProcessImages']                    = FALSE;
 $Configuration['Garden']['Installed']                           = FALSE; // Has Garden been installed yet?
 $Configuration['Garden']['Forms']['HoneypotName']               = 'hpt';
-$Configuration['Garden']['Upload']['MaxFileSize']               = '1024000';
+$Configuration['Garden']['Upload']['MaxFileSize']               = '1M';
 $Configuration['Garden']['Upload']['AllowedFileExtensions']     = array('txt','jpg','gif','png', 'zip', 'gz', 'tar.gz');
 $Configuration['Garden']['Picture']['MaxHeight']                = 1000;
 $Configuration['Garden']['Picture']['MaxWidth']                 = 600;
@@ -80,6 +79,7 @@ $Configuration['Garden']['Thumbnail']['Size']                   = 50;
 $Configuration['Garden']['Menu']['Sort']                        = array('Dashboard', 'Discussions', 'Activity', 'Conversations', 'User');
 $Configuration['Garden']['InputFormatter']                      = 'Html';
 $Configuration['Garden']['Theme']                               = 'default';
+$Configuration['Garden']['Profile']['Public']                   = TRUE;
 $Configuration['Garden']['Profile']['ShowAbout']                = TRUE;
 
 // Default Preferences
@@ -97,15 +97,18 @@ $Configuration['HtmlPurifier']['AutoFormat']['AutoParagraph']   = TRUE;
 $Configuration['HtmlPurifier']['AutoFormat']['Linkify']         = TRUE;
 $Configuration['HtmlPurifier']['Cache']['SerializerPath']       = PATH_CACHE . DS . 'HtmlPurifier';
 $Configuration['HtmlPurifier']['Filter']['YouTube']             = TRUE;
+$Configuration['HtmlPurifier']['Filter']['Vimeo']               = TRUE;
+$Configuration['HtmlPurifier']['Attr']['EnableID']              = TRUE;
 
 // Modules
 $Configuration['Modules']['Garden']['Panel'] = array('UserPhotoModule', 'UserInfoModule', 'GuestModule', 'Ads');
 $Configuration['Modules']['Vanilla']['Panel'] = array('NewDiscussionModule', 'GuestModule', 'Ads');
-$Configuration['Modules']['Vanilla']['Content'] = array('Gdn_MessageModule', 'Notices', 'Content', 'Ads');
-$Configuration['Modules']['Garden']['Content'] = array('Gdn_MessageModule', 'Notices', 'Content', 'Ads');
-$Configuration['Modules']['Conversations']['Content'] = array('Gdn_MessageModule', 'Notices', 'Content', 'Ads');
+$Configuration['Modules']['Vanilla']['Content'] = array('MessageModule', 'Notices', 'Content', 'Ads');
+$Configuration['Modules']['Garden']['Content'] = array('MessageModule', 'Notices', 'Content', 'Ads');
+$Configuration['Modules']['Conversations']['Content'] = array('MessageModule', 'Notices', 'Content', 'Ads');
 
 // Routes
-$Configuration['Routes']['DefaultController'] = 'home';
-$Configuration['Routes']['Default404'] = 'garden/home/filenotfound';
-$Configuration['Routes']['DefaultPermission'] = 'garden/home/permission';
+$Configuration['Routes']['DefaultController'] = 'discussions';
+$Configuration['Routes']['Default404'] = 'dashboard/home/filenotfound';
+$Configuration['Routes']['DefaultPermission'] = 'dashboard/home/permission';
+$Configuration['Routes']['UpdateMode'] = 'dashboard/home/updatemode';

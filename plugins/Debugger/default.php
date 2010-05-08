@@ -17,7 +17,7 @@ $PluginInfo['Debugger'] = array(
    'RequiredPlugins' => FALSE, // This is an array of plugin names/versions that this plugin requires
    'HasLocale' => FALSE, // Does this plugin have any locale definitions?
    'RegisterPermissions' => array('Plugins.Debugger.View','Plugins.Debugger.Manage'), // Permissions that should be added to the application. These will be prefixed with "Plugins.PluginName."
-   'SettingsUrl' => '/garden/plugin/debugger', // Url of the plugin's settings page.
+   'SettingsUrl' => '/dashboard/plugin/debugger', // Url of the plugin's settings page.
    'SettingsPermission' => 'Plugins.Debugger.Manage', // The permission required to view the SettingsUrl.
    'PluginUrl' => 'http://vanillaforums.org/addons/debugger',
    'Author' => "Mark O'Sullivan",
@@ -31,7 +31,7 @@ Gdn::FactoryInstall(Gdn::AliasDatabase, 'Gdn_DatabaseDebug', dirname(__FILE__).D
 Gdn::FactoryOverwrite($tmp);
 unset($tmp);
 
-class DebuggerPlugin implements Gdn_IPlugin {
+class DebuggerPlugin extends Gdn_Plugin {
    // Specifying "Base" as the class name allows us to make the method get called for every
    // class that implements a base class's method. For example, Base_Render_After
    // would allow all controllers that call Controller.Render() to have that method

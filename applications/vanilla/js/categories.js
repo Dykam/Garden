@@ -1,16 +1,25 @@
 jQuery(document).ready(function($) {
-   // Categories->Add() && Categories->Edit()
-   // Hide/reveal the permissions grids when the AllowDiscussions checkbox is un/checked.
-   $('[name=Category/AllowDiscussions]').click(function() {
-      if ($(this).attr('checked'))
-         $('#Permissions').slideDown('fast');
-      else
-         $('#Permissions').slideUp('fast');
+
+   // Map plain text category to url code
+   $("#Form_Name").keyup(function(event) {
+      if ($('#Form_CodeIsDefined').val() == '0')
+         $("#Form_UrlCode").val($(this).val().replace(/[ ]+/g, '-').replace(/[^a-z0-9\-]+/gi,'').toLowerCase());
    });
-   // Categories->Add() && Categories->Edit()
+   // Make sure not to override any values set by the user.
+   $("#Form_UrlCode").focus(function() {
+      $('#Form_CodeIsDefined').val('1')
+   });
+
+   // Hide/reveal the permissions grids when the AllowDiscussions checkbox is un/checked.
+   $('[name=Category/IsParent]').click(function() {
+      if ($(this).attr('checked'))
+         $('#Permissions,#UrlCode').slideUp('fast');
+      else
+         $('#Permissions,#UrlCode').slideDown('fast');
+   });
    // Hide onload if unchecked   
-   if (!$('[name=Category/AllowDiscussions]').attr('checked'))
-      $('#Permissions').hide();
+   if ($('[name=Category/IsParent]').attr('checked'))
+      $('#Permissions,#UrlCode').hide();
    
    // Categories->Delete()
    // Hide/reveal the delete options when the DeleteDiscussions checkbox is un/checked.
@@ -37,14 +46,14 @@ jQuery(document).ready(function($) {
    // Make category table sortable
    if ($.tableDnD) {
       saveAndReload = function(table, row) {
-         var webRoot = definition('WebRoot', '');
-         var transientKey = definition('TransientKey');
+         var webRoot = gdn.definition('WebRoot', '');
+         var transientKey = gdn.definition('TransientKey');
          var tableId = $($.tableDnD.currentTable).attr('id');
          var data = $.tableDnD.serialize() + '&TableID=' + tableId + '&DeliveryType=VIEW&Form/TransientKey=' + transientKey;
-         $.post(combinePaths(webRoot, '/vanilla/settings/sortcategories/'), data, function(response) {
+         $.post(gdn.combinePaths(webRoot, 'index.php/vanilla/settings/sortcategories/'), data, function(response) {
             if (response == 'TRUE') {
                // Reload the page content...
-               $.get(webRoot + '/vanilla/settings/managecategories/?DeliveryType=VIEW', function(data){
+               $.get(gdn.combinePaths(webRoot, '/index.php/vanilla/settings/managecategories/?DeliveryType=VIEW'), function(data){
                   $('#Content form').remove();
                   $('#Content').append(data);
                   $('table.Sortable tbody tr td').effect("highlight", {}, 1000);

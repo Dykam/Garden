@@ -13,7 +13,7 @@ $Construct->Table('Category')
    ->PrimaryKey('CategoryID')
    ->Column('ParentCategoryID', 'int', TRUE)
    ->Column('CountDiscussions', 'int', '0')
-   ->Column('AllowDiscussions', array('1','0'), '1')
+   ->Column('AllowDiscussions', 'tinyint', '1')
    ->Column('Name', 'varchar(30)')
    ->Column('UrlCode', 'varchar(30)', TRUE)
    ->Column('Description', 'varchar(250)', TRUE)
@@ -25,7 +25,7 @@ $Construct->Table('Category')
    ->Set($Explicit, $Drop);
 
 if ($Drop)
-   $SQL->Insert('Category', array('InsertUserID' => 1, 'UpdateUserID' => 1, 'DateInserted' => Format::ToDateTime(), 'DateUpdated' => Format::ToDateTime(), 'Name' => 'General', 'Description' => 'General discussions', 'Sort' => '1'));
+   $SQL->Insert('Category', array('InsertUserID' => 1, 'UpdateUserID' => 1, 'DateInserted' => Gdn_Format::ToDateTime(), 'DateUpdated' => Gdn_Format::ToDateTime(), 'Name' => 'General', 'UrlCode' => 'general', 'Description' => 'General discussions', 'Sort' => '1'));
 
 // Construct the discussion table.
 $Construct->Table('Discussion')
@@ -33,17 +33,22 @@ $Construct->Table('Discussion')
    ->Column('CategoryID', 'int', FALSE, 'key')
    ->Column('InsertUserID', 'int', FALSE, 'key')
    ->Column('UpdateUserID', 'int')
-   ->Column('FirstCommentID', 'int', TRUE, 'key')
-   ->Column('LastCommentID', 'int', TRUE, 'key')
+	->Column('FirstCommentID', 'int', TRUE, 'key')	// Deleted April 26, 2010
+   ->Column('LastCommentID', 'int', TRUE)
    ->Column('Name', 'varchar(100)', FALSE, 'fulltext')
+	->Column('Body', 'text', FALSE, 'fulltext')
+	->Column('Format', 'varchar(20)', TRUE)
    ->Column('CountComments', 'int', '1')
-   ->Column('Closed', array('1', '0'), '0')
-   ->Column('Announce', array('1', '0'), '0')
-   ->Column('Sink', array('1', '0'), '0')
-   ->Column('DateInserted', 'datetime', NULL, 'key')
+   ->Column('Closed', 'tinyint(1)', '0')
+   ->Column('Announce', 'tinyint(1)', '0')
+   ->Column('Sink', 'tinyint(1)', '0')
+   ->Column('DateInserted', 'datetime', NULL)
    ->Column('DateUpdated', 'datetime')
    ->Column('DateLastComment', 'datetime', NULL, 'index')
+	->Column('LastCommentUserID', 'int', TRUE)
+	->Column('Score', 'float', NULL)
    ->Column('Attributes', 'text', TRUE)
+   ->Engine('MyISAM')
    ->Set($Explicit, $Drop);
    
 // Allows the tracking of relationships between discussions and users (bookmarks, dismissed announcements, # of read comments in a discussion, etc)
@@ -53,24 +58,26 @@ $Construct->Table('UserDiscussion')
    ->Column('DiscussionID', 'int', FALSE, 'primary')
    ->Column('CountComments', 'int', '0')
    ->Column('DateLastViewed', 'datetime')
-   ->Column('Dismissed', 'varchar(1)', TRUE) // Relates to dismissed announcements
-   ->Column('Bookmarked', 'varchar(1)', TRUE)
+   ->Column('Dismissed', 'tinyint(1)', '0') // Relates to dismissed announcements
+   ->Column('Bookmarked', 'tinyint(1)', '0')
    ->Set($Explicit, $Drop);
 
 $Construct->Table('Comment')
-   ->PrimaryKey('CommentID')
-   ->Column('DiscussionID', 'int', FALSE, 'key')
-   ->Column('InsertUserID', 'int', TRUE, 'key')
-   ->Column('UpdateUserID', 'int', TRUE)
-   ->Column('DeleteUserID', 'int', TRUE)
-   ->Column('Body', 'text', FALSE, 'fulltext')
-   ->Column('Format', 'varchar(20)', TRUE)
-   ->Column('DateInserted', 'datetime', NULL, 'key')
-   ->Column('DateDeleted', 'datetime', TRUE)
-   ->Column('DateUpdated', 'datetime', TRUE)
-   ->Column('Flag', 'tinyint', 0)
-   ->Column('Attributes', 'text', TRUE)
-   ->Set($Explicit, $Drop);
+	->PrimaryKey('CommentID')
+	->Column('DiscussionID', 'int', FALSE, 'key')
+	->Column('InsertUserID', 'int', TRUE, 'key')
+	->Column('UpdateUserID', 'int', TRUE)
+	->Column('DeleteUserID', 'int', TRUE)
+	->Column('Body', 'text', FALSE, 'fulltext')
+	->Column('Format', 'varchar(20)', TRUE)
+	->Column('DateInserted', 'datetime', NULL, 'key')
+	->Column('DateDeleted', 'datetime', TRUE)
+	->Column('DateUpdated', 'datetime', TRUE)
+	->Column('Flag', 'tinyint', 0)
+	->Column('Score', 'float', NULL)
+	->Column('Attributes', 'text', TRUE)
+	->Engine('MyISAM')
+	->Set($Explicit, $Drop);
 
 // Allows the tracking of already-read comments on a per-user basis.
 $Construct->Table('CommentWatch')
@@ -95,9 +102,9 @@ $Construct->Table('Draft')
    ->Column('InsertUserID', 'int', FALSE, 'key')
    ->Column('UpdateUserID', 'int')
    ->Column('Name', 'varchar(100)', TRUE)
-   ->Column('Closed', array('1', '0'), '0')
-   ->Column('Announce', array('1', '0'), '0')
-   ->Column('Sink', array('1', '0'), '0')
+   ->Column('Closed', 'tinyint(1)', '0')
+   ->Column('Announce', 'tinyint(1)', '0')
+   ->Column('Sink', 'tinyint(1)', '0')
    ->Column('Body', 'text')
    ->Column('Format', 'varchar(20)', TRUE)
    ->Column('DateInserted', 'datetime')
@@ -214,3 +221,79 @@ if ($Drop) {
    // Make sure that User.Permissions is blank so new permissions for users get applied.
    $SQL->Update('User', array('Permissions' => ''))->Put();
 }
+
+
+/*
+Apr 26th, 2010
+Removed FirstComment from GDN_Discussion and moved it into the discussion table.
+*/
+if (!$Construct->CaptureOnly) {
+	$SQL->Query('update GDN_Discussion, GDN_Comment
+	set GDN_Discussion.Body = GDN_Comment.Body,
+		GDN_Discussion.Format = GDN_Comment.Format
+	where GDN_Discussion.FirstCommentID = GDN_Comment.CommentID');
+
+	// Update lastcommentid & firstcommentid
+	$SQL->Query('update GDN_Discussion set LastCommentID = null where LastCommentID = FirstCommentID');
+	
+	$SQL->Query('delete GDN_Comment
+	from GDN_Comment inner join GDN_Discussion
+	where GDN_Comment.CommentID = GDN_Discussion.FirstCommentID');
+	
+	$SQL->Query('update GDN_Discussion d
+	inner join GDN_Comment c
+		on c.DiscussionID = d.DiscussionID
+	inner join (
+		select max(c2.CommentID) as CommentID
+		from GDN_Comment c2
+		group by c2.DiscussionID
+	) c2
+	on c.CommentID = c2.CommentID
+	set d.LastCommentID = c.CommentID,
+		d.LastCommentUserID = c.InsertUserID
+	where d.LastCommentUserID is null');
+	
+	/*
+	  	Apr 26th, 2010
+	  	Changed all "enum" fields representing "bool" (0 or 1) to be tinyint.
+	  	For some reason mysql makes 0's "2" during this change. Change them back to "0".
+	*/
+	$SQL->Query("update GDN_Category set AllowDiscussions = '0' where AllowDiscussions = '2'");
+
+	$SQL->Query("update GDN_Discussion set Closed = '0' where Closed = '2'");
+	$SQL->Query("update GDN_Discussion set Announce = '0' where Announce = '2'");
+	$SQL->Query("update GDN_Discussion set Sink = '0' where Sink = '2'");
+
+	$SQL->Query("update GDN_UserDiscussion set Dismissed = '0' where Dismissed = '2'");
+	$SQL->Query("update GDN_UserDiscussion set Dismissed = '0' where Dismissed is null");
+	$SQL->Query("update GDN_UserDiscussion set Bookmarked = '0' where Bookmarked = '2'");
+	$SQL->Query("update GDN_UserDiscussion set Bookmarked = '0' where Bookmarked is null");
+
+	$SQL->Query("update GDN_Comment set Flag = '0' where Flag = '2'");
+
+	$SQL->Query("update GDN_Draft set Closed = '0' where Closed = '2'");
+	$SQL->Query("update GDN_Draft set Announce = '0' where Announce = '2'");
+	$SQL->Query("update GDN_Draft set Sink = '0' where Sink = '2'");
+}
+
+// This is the final structure of the discussion table after removed & updated columns
+$Construct->Table('Discussion')
+   ->PrimaryKey('DiscussionID')
+   ->Column('CategoryID', 'int', FALSE, 'key')
+   ->Column('InsertUserID', 'int', FALSE, 'key')
+   ->Column('UpdateUserID', 'int')
+   ->Column('LastCommentID', 'int', TRUE)
+   ->Column('Name', 'varchar(100)', FALSE, 'fulltext')
+	->Column('Body', 'text', FALSE, 'fulltext')
+	->Column('Format', 'varchar(20)', TRUE)
+   ->Column('CountComments', 'int', '1')
+   ->Column('Closed', 'tinyint(1)', '0')
+   ->Column('Announce', 'tinyint(1)', '0')
+   ->Column('Sink', 'tinyint(1)', '0')
+   ->Column('DateInserted', 'datetime', NULL)
+   ->Column('DateUpdated', 'datetime')
+   ->Column('DateLastComment', 'datetime', NULL, 'index')
+	->Column('LastCommentUserID', 'int', TRUE)
+	->Column('Score', 'float', NULL)
+   ->Column('Attributes', 'text', TRUE)
+   ->Set($Explicit, $Drop);
