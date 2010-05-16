@@ -12,17 +12,12 @@ echo $this->Form->Errors();
 ?>
 <ul>
 	<li>
-		<p><?php 
-         $OriginalFilename = GetValue('OriginalFilename', $this->Data);
-         
-         if($OriginalFilename) :
-				echo T('Import File: '.htmlentities($OriginalFilename)); 
-			
-			else :
-			   echo T('Select the file to import.'); ?></p><?php
-			   echo $this->Form->Input('ImportFile', 'file');
-			   
-			endif;
+		<p><?php echo T('Select the file to import.'); ?></p>
+		<?php
+			echo $this->Form->Input('ImportFile', 'file');
+			$OriginalFilename = GetValue('OriginalFilename', $this->Data);
+			if($OriginalFilename)
+				echo ' (', htmlentities($OriginalFilename), ')';
 		?>
 	</li>
 	<li>
