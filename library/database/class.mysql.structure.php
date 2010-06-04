@@ -32,7 +32,8 @@ class Gdn_MySQLStructure extends Gdn_DatabaseStructure {
     * Drops $this->Table() from the database.
     */
    public function Drop() {
-      return $this->Query('drop table `'.$this->_DatabasePrefix.$this->_TableName.'`');
+      if($this->TableExists())
+         return $this->Query('drop table `'.$this->_DatabasePrefix.$this->_TableName.'`');
    }
 
    /**
@@ -237,7 +238,7 @@ class Gdn_MySQLStructure extends Gdn_DatabaseStructure {
    }
    
    protected function _IndexSqlDb() {
-      // We don't want this to be captures so send it directly.
+      // We don't want this to be captured so send it directly.
       $Data = $this->Database->Query('show indexes from '.$this->_DatabasePrefix.$this->_TableName);
       
       $Result = array();   
@@ -261,6 +262,16 @@ class Gdn_MySQLStructure extends Gdn_DatabaseStructure {
                case 'TX':
                   $Type = 'fulltext index '.$Row->Key_name;
                   break;
+               default:
+                  // Try and guess the index type.
+                  if(strcasecmp($Row->Index_type, 'fulltext') == 0)
+                     $Type = 'fulltext index '.$Row->Key_name;
+                  elseif($Row->Non_unique)
+                     $Type = 'index '.$Row->Key_name;
+                  else
+                     $Type = 'unique index '.$Row->Key_name;
+
+                  break;
             }
             $Result[$Row->Key_name] = $Type.' (`'.$Row->Column_name.'`';
          }
@@ -281,10 +292,13 @@ class Gdn_MySQLStructure extends Gdn_DatabaseStructure {
     * defined with $this->Column().
     */
    protected function _Modify($Explicit = FALSE) {
+      $Px = $this->_DatabasePrefix;
+      $AdditionalSql = array(); // statements executed at the end
+
       // Returns an array of schema data objects for each field in the specified
       // table. The returned array of objects contains the following properties:
       // Name, PrimaryKey, Type, AllowNull, Default, Length, Enum.
-      $ExistingColumns = $this->Database->SQL()->FetchTableSchema($this->_TableName);
+      $ExistingColumns = $this->ExistingColumns();
 
       // 1. Remove any unnecessary columns if this is an explicit modification
       if ($Explicit) {
@@ -316,21 +330,49 @@ class Gdn_MySQLStructure extends Gdn_DatabaseStructure {
       // array_diff returns values from the first array that aren't present in
       // the second array. In this example, all columns in $this->_Columns that
       // are NOT in the table.
+      $PrevColumnName = FALSE;
       foreach ($this->_Columns as $ColumnName => $Column) {
          if (!array_key_exists($ColumnName, $ExistingColumns)) {
 
             // This column name is not in the existing column collection, so add the column
-            if (!$this->Query($AlterSqlPrefix.' add '.$this->_DefineColumn(GetValue($ColumnName, $this->_Columns))))
+            $AddColumnSql = $AlterSqlPrefix.' add '.$this->_DefineColumn(GetValue($ColumnName, $this->_Columns));
+            if($PrevColumnName !== FALSE)
+               $AddColumnSql .= " after `$PrevColumnName`";
+
+            if (!$this->Query($AddColumnSql))
                throw new Exception(T('Failed to add the `'.$Column.'` column to the `'.$this->_DatabasePrefix.$this->_TableName.'` table.'));
          } else {
-				$ExistingColumn = $ExistingColumns[$ColumnName];	
-				if ($Column->Type != $ExistingColumn->Type || ($Column->Length != $ExistingColumn->Length && !in_array($Column->Type, array('tinyint', 'smallint', 'int', 'bigint', 'float', 'double')))) {
+				$ExistingColumn = $ExistingColumns[$ColumnName];
 
-					// The existing & new column types do not match, so modify the column
-					if (!$this->Query($AlterSqlPrefix.' change '.$ColumnName.' '.$this->_DefineColumn(GetValue($ColumnName, $this->_Columns))))
+            $ExistingColumnDef = $this->_DefineColumn($ExistingColumn);
+            $ColumnDef = $this->_DefineColumn($Column);
+            $Comment = "/* Existing: $ExistingColumnDef, New: $ColumnDef */\n";
+            
+				if ($ExistingColumnDef != $ColumnDef) {  //$Column->Type != $ExistingColumn->Type || $Column->AllowNull != $ExistingColumn->AllowNull || ($Column->Length != $ExistingColumn->Length && !in_array($Column->Type, array('tinyint', 'smallint', 'int', 'bigint', 'float', 'double')))) {
+               // The existing & new column types do not match, so modify the column
+					if (!$this->Query($Comment.$AlterSqlPrefix.' change '.$ColumnName.' '.$this->_DefineColumn(GetValue($ColumnName, $this->_Columns))))
 						throw new Exception(T('Failed to modify the data type of the `'.$ColumnName.'` column on the `'.$this->_DatabasePrefix.$this->_TableName.'` table.'));
+
+               // Check for a modification from an enum to an int.
+               if(strcasecmp($ExistingColumn->Type, 'enum') == 0 && in_array(strtolower($Column->Type), $this->Types('int'))) {
+                  $Sql = "update `$Px{$this->_TableName}` set `$ColumnName` = case `$ColumnName`";
+                  foreach($ExistingColumn->Enum as $Index => $NewValue) {
+                     $OldValue = $Index + 1;
+                     
+                     if(!is_numeric($NewValue))
+                        continue;
+                     $NewValue = (int)$NewValue;
+
+                     $Sql .= " when $OldValue then $NewValue";
+                  }
+                  $Sql .= " else `$ColumnName` end";
+                  $Description = "Update {$this->_TableName}.$ColumnName enum values to {$Column->Type}";
+                  $AdditionalSql[$Description] = $Sql;
+
+               }
 				}
          }
+         $PrevColumnName = $ColumnName;
       }
       
       // 4. Update Indexes
@@ -368,6 +410,12 @@ class Gdn_MySQLStructure extends Gdn_DatabaseStructure {
             throw new Exception(sprintf(T('Error.ModifyIndex', 'Failed to add or modify the `%s` index in the `%s` table.'), $Name, $this->_TableName));
       }
 
+      // Run any additional Sql.
+      foreach($AdditionalSql as $Description => $Sql) {
+         if(!$this->Query($Sql))
+            throw new Exception("Error modifying table: $Description.");
+      }
+
       $this->Reset();
       return TRUE;
    }
@@ -379,11 +427,13 @@ class Gdn_MySQLStructure extends Gdn_DatabaseStructure {
     * @todo This method and $Column need descriptions.
     */
    protected function _DefineColumn($Column) {
-      if (!is_array($Column->Type) && !in_array($Column->Type, array('tinyint', 'smallint', 'int', 'bigint', 'char', 'varchar', 'varbinary', 'date', 'datetime', 'text', 'decimal', 'float', 'double', 'enum')))
+      if (!is_array($Column->Type) && !in_array($Column->Type, array('tinyint', 'smallint', 'int', 'bigint', 'char', 'varchar', 'varbinary', 'date', 'datetime', 'text', 'decimal', 'float', 'double', 'enum', 'timestamp')))
          throw new Exception(T('The specified data type ('.$Column->Type.') is not accepted for the MySQL database.'));
       
       $Return = '`'.$Column->Name.'` '.$Column->Type;
-      if ($Column->Length != '') {
+      
+      $LengthTypes = $this->Types('length');
+      if ($Column->Length != '' && in_array(strtolower($Column->Type), $LengthTypes)) {
          if($Column->Precision != '')
             $Return .= '('.$Column->Length.', '.$Column->Precision.')';
          else
@@ -399,7 +449,7 @@ class Gdn_MySQLStructure extends Gdn_DatabaseStructure {
       if (!$Column->AllowNull)
          $Return .= ' not null';
 
-      if (!is_null($Column->Default))
+      if (!is_null($Column->Default) && strcasecmp($Column->Type, 'timestamp') != 0)
          $Return .= " default ".self::_QuoteValue($Column->Default);
 
       if ($Column->AutoIncrement)

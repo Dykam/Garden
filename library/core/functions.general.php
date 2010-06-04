@@ -209,6 +209,7 @@ if (!function_exists('Asset')) {
     * Takes the path to an asset (image, js file, css file, etc) and prepends the webroot.
     */
    function Asset($Destination = '', $WithDomain = FALSE) {
+      $Destination = str_replace('\\', '/', $Destination);
       if (substr($Destination, 0, 7) == 'http://') {
          return $Destination;
       } else {
@@ -273,6 +274,13 @@ if (!function_exists('CalculateNumberOfPages')) {
          $PageCount = 1;
       }
       return $PageCount;
+   }
+}
+
+if (!function_exists('CheckPermission')) {
+   function CheckPermission($PermissionName) {
+      $Result = Gdn::Session()->CheckPermission($PermissionName);
+      return $Result;
    }
 }
 
@@ -370,6 +378,37 @@ if (!function_exists('CombinePaths')) {
       } else {
          return $Paths;
       }
+   }
+}
+
+if (!function_exists('ConcatSep')) {
+   /** Concatenate a string to another string with a seperator.
+    *
+    * @param string $Sep The seperator string to use between the concatenated strings.
+    * @param string $Str1 The first string in the concatenation chain.
+    * @param mixed $Str2 The second string in the concatenation chain.
+    *  - This parameter can be an array in which case all of its elements will be concatenated.
+    *  - If this parameter is a string then the function will look for more arguments to concatenate.
+    * @return string
+    */
+   function ConcatSep($Sep, $Str1, $Str2) {
+      if(is_array($Str2)) {
+         $Strings = array_merge((array)$Str1, $Str2);
+      } else {
+         $Strings = func_get_args();
+         array_shift($Strings);
+      }
+
+      $Result = '';
+      foreach($Strings as $String) {
+         if(!$String)
+            continue;
+
+         if($Result)
+            $Result .= $Sep;
+         $Result .= $String;
+      }
+      return $Result;
    }
 }
 
@@ -529,17 +568,52 @@ if (!function_exists('GetValue')) {
 	 * @param string $Key The key or property name of the value.
 	 * @param mixed $Collection The array or object to search.
 	 * @param mixed $Default The value to return if the key does not exist.
+    * @param bool $Remove Whether or not to remove the item from the collection.
 	 * @return mixed The value from the array or object.
 	 */
-	function GetValue($Key, $Collection, $Default = FALSE) {
+	function GetValue($Key, &$Collection, $Default = FALSE, $Remove = FALSE) {
 		$Result = $Default;
-		if(is_array($Collection) && array_key_exists($Key, $Collection))
+		if(is_array($Collection) && array_key_exists($Key, $Collection)) {
 			$Result = $Collection[$Key];
-		elseif(is_object($Collection) && property_exists($Collection, $Key))
+         if($Remove)
+            unset($Collection[$Key]);
+		} elseif(is_object($Collection) && property_exists($Collection, $Key)) {
 			$Result = $Collection->$Key;
+         if($Remove)
+            unset($Collection->$Key);
+      }
 			
       return $Result;
 	}
+}
+
+if (!function_exists('GetValueR')) {
+   /**
+	 * Return the value from an associative array or an object.
+    * This function differs from GetValue() in that $Key can be a string consisting of dot notation that will be used to recursivly traverse the collection.
+	 *
+	 * @param string $Key The key or property name of the value.
+	 * @param mixed $Collection The array or object to search.
+	 * @param mixed $Default The value to return if the key does not exist.
+	 * @return mixed The value from the array or object.
+	 */
+   function GetValueR($Key, &$Collection, $Default = FALSE) {
+      $Path = explode('.', $Key);
+
+      $Value = $Collection;
+      for($i = 0; $i < count($Path); ++$i) {
+         $SubKey = $Path[$i];
+
+         if(is_array($Value) && isset($Value[$SubKey])) {
+            $Value = $Value[$SubKey];
+         } elseif(is_object($Value) && isset($Value->$SubKey)) {
+            $Value = $Value->$SubKey;
+         } else {
+            return $Default;
+         }
+      }
+      return $Value;
+   }
 }
 
 if (!function_exists('InArrayI')) {
@@ -695,6 +769,7 @@ if (!function_exists('ProxyHead')) {
          $Handler = curl_init();
 			curl_setopt($Handler, CURLOPT_TIMEOUT, $Timeout);
          curl_setopt($Handler, CURLOPT_URL, $Url);
+         curl_setopt($Handler, CURLOPT_PORT, $Port);
          curl_setopt($Handler, CURLOPT_HEADER, 1);
          curl_setopt($Handler, CURLOPT_NOBODY, 1);
          curl_setopt($Handler, CURLOPT_RETURNTRANSFER, 1);
@@ -809,9 +884,11 @@ if (!function_exists('ProxyRequest')) {
 
       $Response = '';
       if (function_exists('curl_init')) {
+         
          $Url = $Scheme.'://'.$Host.$Path;
          $Handler = curl_init();
          curl_setopt($Handler, CURLOPT_URL, $Url);
+         curl_setopt($Handler, CURLOPT_PORT, $Port);
          curl_setopt($Handler, CURLOPT_HEADER, 0);
          curl_setopt($Handler, CURLOPT_RETURNTRANSFER, 1);
          if ($Cookie != '')
@@ -880,7 +957,9 @@ if (!function_exists('RandomString')) {
 }
 
 if (!function_exists('Redirect')) {
-   function Redirect($Destination) {
+   function Redirect($Destination = FALSE) {
+      if (!$Destination)
+         $Destination = Url('');
       // Close any db connections before exit
       $Database = Gdn::Database();
       $Database->CloseConnection();
@@ -890,6 +969,12 @@ if (!function_exists('Redirect')) {
       header("location: ".Url($Destination));
       // Exit
       exit();
+   }
+}
+
+if (!function_exists('RemoteIP')) {
+   function RemoteIP() {
+      return GetValue('REMOTE_ADDR', $_SERVER, 'undefined');
    }
 }
 
@@ -904,7 +989,10 @@ if (!function_exists('RemoveFromConfig')) {
       foreach ($Name as $k) {
          $Config->Remove($k);
       }
-      return $Config->Save($Path);
+      $Result = $Config->Save($Path);
+      if ($Result)
+         $Config->Load($Path, 'Use');
+      return $Result;
    }
 }
 
@@ -956,9 +1044,14 @@ if (!function_exists('SaveToConfig')) {
 
 if (!function_exists('SliceString')) {
    function SliceString($String, $Length, $Suffix = '…') {
-	static $Charset;
-	if(is_null($Charset)) $Charset = Gdn::Config('Garden.Charset', 'utf-8');
-	return mb_strimwidth($String, 0, $Length, $Suffix, $Charset);
+      if (function_exists('mb_strimwidth')) {
+      	static $Charset;
+      	if(is_null($Charset)) $Charset = Gdn::Config('Garden.Charset', 'utf-8');
+      	return mb_strimwidth($String, 0, $Length, $Suffix, $Charset);
+      } else {
+         $Trim = trim($String, 0, $Length);
+         return $Trim . ((strlen($Trim) != strlen($String)) ? $Suffix: ''); 
+      }
    }
 }
 
@@ -985,11 +1078,13 @@ if (!function_exists('SetValue')) {
 	}
 }
 
+
 if (!function_exists('T')) {
    /**
 	 * Translates a code into the selected locale's definition.
 	 *
 	 * @param string $Code The code related to the language-specific definition.
+    *   Codes thst begin with an '@' symbol are treated as literals and not translated.
 	 * @param string $Default The default value to be displayed if the translation code is not found.
 	 * @return string The translated string or $Code if there is no value in $Default.
 	 * @see Gdn::Translate()
@@ -999,17 +1094,35 @@ if (!function_exists('T')) {
    }
 }
 
+if (!function_exists('TouchValue')) {
+	/**
+	 * Set the value on an object/array if it doesn't already exist.
+	 *
+	 * @param string $Key The key or property name of the value.
+	 * @param mixed $Collection The array or object to set.
+	 * @param mixed $Default The value to set.
+	 */
+	function TouchValue($Key, &$Collection, $Default) {
+		if(is_array($Collection) && !array_key_exists($Key, $Collection))
+			$Collection[$Key] = $Default;
+		elseif(is_object($Collection) && !property_exists($Collection, $Key))
+			$Collection->$Key = $Default;
+	}
+}
+
 if (!function_exists('Translate')) {
    /**
 	 * Translates a code into the selected locale's definition.
 	 *
 	 * @param string $Code The code related to the language-specific definition.
+    *   Codes thst begin with an '@' symbol are treated as literals and not translated.
 	 * @param string $Default The default value to be displayed if the translation code is not found.
 	 * @return string The translated string or $Code if there is no value in $Default.
 	 * @deprecated
 	 * @see Gdn::Translate()
 	 */
    function Translate($Code, $Default = '') {
+      trigger_error('Translate() is deprecated. Use T() instead.', E_USER_DEPRECATED);
       return Gdn::Translate($Code, $Default);
    }
 }
@@ -1028,30 +1141,31 @@ if (!function_exists('TrueStripSlashes')) {
 
 // Takes a route and prepends the web root (expects "/controller/action/params" as $Destination)
 if (!function_exists('Url')) {   
-   function Url($Destination = '', $WithDomain = FALSE, $RemoveSyndication = FALSE) {
+   function Url($Path = '', $WithDomain = FALSE, $RemoveSyndication = FALSE) {
+      $Result = Gdn::Request()->Url($Path, $WithDomain);
+      return $Result;
+
       // Cache the rewrite urls config setting in this object.
       static $RewriteUrls = NULL;
       if(is_null($RewriteUrls)) $RewriteUrls = ForceBool(Gdn::Config('Garden.RewriteUrls', FALSE));
       
-      $Prefix = substr($Destination, 0, 7);
+      $Prefix = substr($Path, 0, 7);
       if (in_array($Prefix, array('http://', 'https:/'))) {
-         return $Destination;
-      } else if ($Destination == '#' || $Destination == '') {
-         if ($WithDomain)
-            return Gdn_Url::Request(TRUE, TRUE, $RemoveSyndication).$Destination;
-         else
-            return '/'.Gdn_Url::Request(TRUE, FALSE, $RemoveSyndication).$Destination;
-      } else {
-         $Paths = array();
-         if (!$WithDomain)
-            $Paths[] = '/';
-            
-         $Paths[] = Gdn_Url::WebRoot($WithDomain);
-         if (!$RewriteUrls)
-            $Paths[] = 'index.php';
-            
-         $Paths[] = $Destination;
-         return CombinePaths($Paths, '/');
+         return $Path;
       }
+      if ($Path == '#' || $Path == '') {
+         $Path = Gdn_Url::Request(FALSE, FALSE, $RemoveSyndication).$Path;
+      }
+
+      $Paths = array();
+      if (!$WithDomain)
+         $Paths[] = '/';
+
+      $Paths[] = Gdn_Url::WebRoot($WithDomain);
+      if (!$RewriteUrls)
+         $Paths[] = 'index.php';
+
+      $Paths[] = $Path;
+      return CombinePaths($Paths, '/');
    }
 }

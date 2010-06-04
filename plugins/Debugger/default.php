@@ -17,8 +17,6 @@ $PluginInfo['Debugger'] = array(
    'RequiredPlugins' => FALSE, // This is an array of plugin names/versions that this plugin requires
    'HasLocale' => FALSE, // Does this plugin have any locale definitions?
    'RegisterPermissions' => array('Plugins.Debugger.View','Plugins.Debugger.Manage'), // Permissions that should be added to the application. These will be prefixed with "Plugins.PluginName."
-   'SettingsUrl' => '/dashboard/plugin/debugger', // Url of the plugin's settings page.
-   'SettingsPermission' => 'Plugins.Debugger.Manage', // The permission required to view the SettingsUrl.
    'PluginUrl' => 'http://vanillaforums.org/addons/debugger',
    'Author' => "Mark O'Sullivan",
    'AuthorEmail' => 'mark@vanillaforums.com',
@@ -74,7 +72,7 @@ class DebuggerPlugin extends Gdn_Plugin {
                   }
                }
                $String .= $QueryInfo['Method']
-                  .'<small>'.number_format($QueryTimes[$Key], 6).'s</small>'
+                  .'<small>'.@number_format($QueryTimes[$Key], 6).'s</small>'
                   .'<pre>'.$Query.';</pre>';
             }
          }

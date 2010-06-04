@@ -228,11 +228,16 @@ class Gdn_Request {
       );
       $NumDataTypes = sizeof($QueryOrder);
       
-      for ($i=0; $i <= $NumDataTypes; $i++) {
+      for ($i=0; $i < $NumDataTypes; $i++) {
          $DataType = $QueryOrder[$i];
          if (!array_key_exists($DataType, $this->_RequestArguments)) continue;
-         if (array_key_exists($Key, $this->_RequestArguments[$DataType]))
-            return filter_var($this->_RequestArguments[$DataType][$Key], FILTER_SANITIZE_STRING);
+         if (array_key_exists($Key, $this->_RequestArguments[$DataType])) {
+            $Data = $this->_RequestArguments[$DataType][$Key];
+            if (is_array($Data) || is_object($Data))
+               return $Data;
+            else
+               return filter_var($Data, FILTER_SANITIZE_STRING);
+         }
       }
       return $Default;
    }
@@ -249,10 +254,22 @@ class Gdn_Request {
    public function GetValueFrom($ParamType, $Key, $Default = FALSE) {
       $ParamType = strtolower($ParamType);
       
-      if (array_key_exists($ParamType, $this->_RequestArguments) && array_key_exists($Key, $this->_RequestArguments[$ParamType]))
-         return filter_var($this->_RequestArguments[$ParamType][$Key], FILTER_SANITIZE_STRING);
-         
+      if (array_key_exists($ParamType, $this->_RequestArguments) && array_key_exists($Key, $this->_RequestArguments[$ParamType])) {
+         $Val = $this->_RequestArguments[$ParamType][$Key];
+         if (is_array($Val) || is_object($Val))
+            return $Val;
+         else
+            return filter_var($Val, FILTER_SANITIZE_STRING);
+      }
       return $Default;
+   }
+   
+   public function Host($Hostname = NULL) {
+      return $this->RequestHost($Hostname);
+   }
+   
+   public function Scheme($Scheme = NULL) {
+      return $this->RequestScheme($Scheme);
    }
    
    /**
@@ -267,10 +284,17 @@ class Gdn_Request {
    protected function _LoadEnvironment() {
    
       $this->_EnvironmentElement('ConfigWebRoot', Gdn::Config('Garden.WebRoot'));
-      $this->_EnvironmentElement('ConfigStripUrls', Gdn::Config('Garden.StripWebRoot', FALSE));
+      $this->_EnvironmentElement('ConfigStrips', Gdn::Config('Garden.StripWebRoot', FALSE));
 
-      $this->RequestHost(     isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : $_SERVER['SERVER_NAME']);
-      $this->RequestMethod(   isset($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : 'CONSOLE');
+      if (!isset($_SERVER['SHELL'])) {
+         $this->RequestHost(     isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : $_SERVER['SERVER_NAME']);
+         $this->RequestMethod(   isset($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : 'CONSOLE');
+         
+         $this->RequestScheme(   (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] == 'on') ? 'https' : 'http');
+      } else {
+         
+         $this->RequestScheme('console');
+      }
       
       $SetURI = FALSE;
       if (isset($_SERVER['REQUEST_URI'])) {
@@ -283,9 +307,16 @@ class Gdn_Request {
          $SetURI = TRUE;
       }
       
-      if (!$SetURI)
+      if (!$SetURI && isset($_ENV['REQUEST_URI'])) {
          $this->RequestURI($_ENV['REQUEST_URI']);
-
+         $SetURI = TRUE;
+      }
+      
+      if (!$SetURI) {
+         
+         return;
+      }
+      
       $PossibleScriptNames = array();
       if (isset($_SERVER['SCRIPT_NAME']))
          $PossibleScriptNames[] = $_SERVER['SCRIPT_NAME'];
@@ -351,18 +382,30 @@ class Gdn_Request {
     * @return void
     */
    protected function _ParseRequest() {
-
       $this->_Parsing = TRUE;
+
+      // Look for the path as the first get key.
+      $Get = $this->GetRequestArguments(self::INPUT_GET);
+      if(is_array($Get)) {
+         $Value = reset($Get);
+         $Path = key($Get);
+         if($Value !== '')
+            $Path = FALSE;
+      }
 
       /**
        * Resolve final request to send to dispatcher
        */
       // Get the dispatch string from the URI
-      $Expression = '/^(?:\/?'.str_replace('/', '\/', $this->_EnvironmentElement('Folder')).')?(?:'.$this->_EnvironmentElement('Script').')?\/?(.*?)\/?(?:[#?].*)?$/i';
-      if (preg_match($Expression, $this->_EnvironmentElement('URI'), $Match))
-         $this->Path($Match[1]);
-      else
-         $this->Path('');
+      if($Path !== FALSE) {
+         $this->Path(trim($Path, '/'));
+      } else {
+         $Expression = '/^(?:\/?'.str_replace('/', '\/', $this->_EnvironmentElement('Folder')).')?(?:'.$this->_EnvironmentElement('Script').')?\/?(.*?)\/?(?:[#?].*)?$/i';
+         if (preg_match($Expression, $this->_EnvironmentElement('URI'), $Match))
+            $this->Path($Match[1]);
+         else
+            $this->Path('');
+      }
 
       /**
        * Resolve optional output modifying file extensions (rss, json, etc)
@@ -382,28 +425,21 @@ class Gdn_Request {
        */
 
       // Attempt to get the webroot from the configuration array
-      $WebRoot = $this->_EnvironmentElement('ConfigWebRoot');
+      $WebRoot = (string)$this->_EnvironmentElement('ConfigWebRoot');
 
       // Attempt to get the webroot from the server
-      if ($WebRoot === FALSE || $WebRoot == '') {
+      if (!$WebRoot) {
          $WebRoot = explode('/', ArrayValue('PHP_SELF', $_SERVER, ''));
 
          // Look for index.php to figure out where the web root is.
          $Key = array_search('index.php', $WebRoot);
          if ($Key !== FALSE) {
             $WebRoot = implode('/', array_slice($WebRoot, 0, $Key));
-         } else {
-            $WebRoot = '';
          }
       }
 
-      if (is_string($WebRoot) && $WebRoot != '') {
-         // Strip forward slashes from the beginning of webroot
-         $ResolvedWebRoot = trim($WebRoot,'/').'/';
-      } else {
-         $ResolvedWebRoot = '';
-      }
-      $this->WebRoot($ResolvedWebRoot);
+      $ParsedWebRoot = trim($WebRoot,'/');
+      $this->WebRoot($ParsedWebRoot);
 
       /**
        * Resolve Domain
@@ -413,13 +449,13 @@ class Gdn_Request {
       $Domain = Gdn::Config('Garden.Domain', '');
 
       if ($Domain === FALSE || $Domain == '')
-         $Domain = ArrayValue('HTTP_HOST', $_SERVER, '');
+         $Domain = $this->Host();
 
       if ($Domain != '' && $Domain !== FALSE) {
-         if (substr($Domain, 0, 7) != 'http://')
-            $Domain = 'http://'.$Domain;
+         if (!stristr($Domain,'://'))
+            $Domain = $this->Scheme().'://'.$Domain;
 
-         $Domain = trim($Domain, '/').'/';
+         $Domain = trim($Domain, '/');
       }
       $this->Domain($Domain);
       
@@ -438,7 +474,7 @@ class Gdn_Request {
     * @param $Value value of $Key key to set
     * @return string | NULL
     */
-   protected function _ParsedRequestElement($Key, $Value=NULL) {
+   protected function _ParsedRequestElement($Key, $Value = NULL) {
       // Lazily parse if not already parsed
       if (!$this->_HaveParsedRequest && !$this->_Parsing)
          $this->_ParseRequest();
@@ -512,6 +548,13 @@ class Gdn_Request {
       $this->_RequestArguments[$ParamsType] = $ArgumentData;
    }
    
+   public function SetValueOn($ParamType, $ParamName, $ParamValue) {
+      if (!isset($this->_RequestArguments[$ParamType]))
+         $this->_RequestArguments[$ParamType] = array();
+         
+      $this->_RequestArguments[$ParamType][$ParamName] = $ParamValue;
+   }
+   
    /**
     * Detach a dataset from the request
     *
@@ -521,38 +564,48 @@ class Gdn_Request {
    public function _UnsetRequestArguments($ParamsType) {
       unset($this->_RequestArguments[$ParamsType]);
    }
-   
+
    /**
     * This method allows safe creation of URLs that need to reference the application itself
     *
-    * Taking the server's RewriteUrls ability into account, and using information from the 
-    * actual Request data, this method can construct a trustworthy URL that will point to 
-    * Garden's dispatcher. Examples: 
+    * Taking the server's RewriteUrls ability into account, and using information from the
+    * actual Request data, this method can construct a trustworthy URL that will point to
+    * Garden's dispatcher. Examples:
     *    - Default port, no rewrites, subfolder:      http://www.forum.com/vanilla/index.php/
     *    - Default port, rewrites                     http://www.forum.com/
     *    - Custom port, rewrites                      http://www.forum.com:8080/index.php/
     *
-    * @param $WithDomain set to false to create a relative URL
-    * @param $PreserveTrailingSlash set to false to strip trailing slash
+    * @param sring $Path of the controller method.
+    * @param bool $WithDomain set to false to create a relative URL
     * @return string
     */
-   public function WebPath($WithDomain = TRUE, $PreserveTrailingSlash = TRUE) {
+   public function Url($Path = '', $WithDomain = FALSE) {
+      if (strpos($Path, '://') !== FALSE)
+         return $Path;
+
       $Parts = array();
-      
-      if ($WithDomain)
+
+      if ($WithDomain) {
          $Parts[] = $this->Domain();
-         
-      $Parts[] = $this->WebRoot();
+      } else
+         $Parts[] = '';
+
+      if ($this->WebRoot() != '')
+         $Parts[] = $this->WebRoot();
+
+
+      if (!Gdn::Config('Garden.RewriteUrls')) {
+         $Parts[] = $this->_EnvironmentElement('Script').'?';
+         $Path = str_replace('?', '&', $Path);
+      }
+
+      if($Path == '')
+         $Path = $this->Path();
+      $Parts[] = trim($Path, '/');
+
+      $Result = implode('/', $Parts);
       
-      if (Gdn::Config('Garden.RewriteUrls', FALSE) === FALSE)
-         $Parts[] = $this->_EnvironmentElement('Script').'/';
-      
-      $Path = implode('', $Parts);
-      $Path = trim($Path, '/');
-      if ($PreserveTrailingSlash)
-         $Path = $Path.'/';
-      
-      return $Path;
+      return $Result;
    }
    
    /**
@@ -562,13 +615,12 @@ class Gdn_Request {
     * @return string
     */
    public function WebRoot($WebRoot = NULL) {
-      $Path = $this->_ParsedRequestElement('WebRoot', $WebRoot);
+      $Path = (string)$this->_ParsedRequestElement('WebRoot', $WebRoot);
       $WebRootFromConfig = $this->_EnvironmentElement('ConfigWebRoot');
 
       $RemoveWebRootConfig = $this->_EnvironmentElement('ConfigStripUrls');
-      if (!empty($WebRootFromConfig) && !is_null($WebRootFromConfig) && $WebRootFromConfig !== FALSE) {
-         if ($RemoveWebRootConfig)
-            $Path = str_replace($WebRootFromConfig,'',$Path);
+      if ($WebRootFromConfig && $RemoveWebRootConfig) {
+         $Path = str_replace($WebRootFromConfig, '', $Path);
       }
       return $Path;
    }
@@ -631,6 +683,18 @@ class Gdn_Request {
       $Method = is_null($Method) ? 'index' : $Method;
       $Path = trim(implode('/',array_merge(array($Controller,$Method),$Args)),'/');
       $this->_EnvironmentElement('URI', $Path);
+      return $this;
+   }
+   
+   public function WithDeliveryType($DeliveryType) {
+      $this->SetValueOn(self::INPUT_GET, 'DeliveryType', $DeliveryType);
+      return $this;
+   }
+   
+   public function WithRoute($Route) {
+      $ParsedURI = Gdn::Router()->GetDestination($Route);
+      if ($ParsedURI)
+         $this->_EnvironmentElement('URI',$ParsedURI);
       return $this;
    }
    

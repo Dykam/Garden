@@ -37,13 +37,13 @@ class Gdn_Url {
     */
    public static function WebRoot($WithDomain = FALSE) {
       $WebRoot = Gdn::Request()->WebRoot();
-      
-      if (is_string($WebRoot) && $WebRoot != '') {
-         // Strip forward slashes from the beginning of webroot
-         return ($WithDomain ? Gdn::Request()->Domain() : '') . preg_replace('/(^\/+)/', '', $WebRoot);
-      } else {
-         return $WithDomain ? Gdn::Request()->Domain() : '';
-      }
+
+      if($WithDomain)
+         $Result = Gdn::Request()->Domain().'/'.$WebRoot;
+      else
+         $Result = $WebRoot;
+
+      return $Result;
    }
 
 
@@ -55,19 +55,7 @@ class Gdn_Url {
     */
    public static function Domain() {
       // Attempt to get the domain from the configuration array
-      $Domain = Gdn::Config('Garden.Domain', '');
-
-      if ($Domain === FALSE || $Domain == '')
-         $Domain = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '';
-      
-      if ($Domain != '' && $Domain !== FALSE) {
-         if (substr($Domain, 0, 7) != 'http://')
-            $Domain = 'http://'.$Domain;
-
-         if (substr($Domain, -1, 1) != '/')
-            $Domain = $Domain . '/';
-      }
-      return $Domain;
+      return Gdn::Request()->Domain();
    }
 
 
@@ -103,6 +91,9 @@ class Gdn_Url {
     * @return string
     */
    public static function Request($WithWebRoot = FALSE, $WithDomain = FALSE, $RemoveSyndication = FALSE) {
-      return (($WithWebRoot) ? self::WebRoot($WithDomain).'/' : '').Gdn::Request()->Path();
+      $Result = Gdn::Request()->Path();
+      if($WithWebRoot)
+         $Result = self::WebRoot($WithDomain).'/'.$Result;
+      return $Result;
    }
 }

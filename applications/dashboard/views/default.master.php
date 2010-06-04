@@ -7,13 +7,12 @@
    <div id="Frame">
       <div id="Head">
          <div class="Menu">
-				<h1><a class="Title" href="<?php echo Url('/'); ?>"><span><?php echo Gdn::Config('Garden.Title', 'Vanilla'); ?></span></a></h1>
+				<h1><a class="Title" href="<?php echo Url('/'); ?>"><span><?php echo Gdn_Theme::Logo(); ?></span></a></h1>
             <?php
-				
 			      $Session = Gdn::Session();
 					if ($this->Menu) {
 						$this->Menu->AddLink('Dashboard', T('Dashboard'), '/dashboard/settings', array('Garden.Settings.Manage'));
-						$this->Menu->AddLink('Dashboard', T('Users'), '/user/browse', array('Garden.Users.Add', 'Garden.Users.Edit', 'Garden.Users.Delete'));
+						// $this->Menu->AddLink('Dashboard', T('Users'), '/user/browse', array('Garden.Users.Add', 'Garden.Users.Edit', 'Garden.Users.Delete'));
 						$this->Menu->AddLink('Activity', T('Activity'), '/activity');
 			         $Authenticator = Gdn::Authenticator();
 						if ($Session->IsValid()) {
@@ -50,10 +49,10 @@
          <div id="Panel"><?php $this->RenderAsset('Panel'); ?></div>
       </div>
       <div id="Foot">
-			<div><?php
-				printf(T('Powered by %s'), '<a href="http://vanillaforums.org"><span>Vanilla</span></a>');
-			?></div>
-			<?php $this->RenderAsset('Foot'); ?>
+			<?php
+				$this->RenderAsset('Foot');
+				echo Wrap(Anchor(T('Powered by Vanilla'), C('Garden.VanillaUrl')), 'div');
+			?>
 		</div>
    </div>
 	<?php $this->FireEvent('AfterBody'); ?>
